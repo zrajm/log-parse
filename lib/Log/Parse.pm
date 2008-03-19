@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 
 use vars qw($VERSION); # FIXME: why this line?
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 =head1 NAME
 
@@ -137,15 +137,15 @@ sub _clear {
     $me->{position}       = 0;
 }
 
-=item $obj = open($file);
+=item $offset = $obj->open($file);
 
 Opens a new logfile (or, if $file is the empty string, standard input)
 for reading. If in resume mode (see B<new()>), B<resume_dir> is set,
 and file has not been overwritten since last read, reading will
 continue reading where it last left off (similar to "tail -f").
 
-Returns undef if file could not be opened, reference to object
-otherwise.
+Returns undef if file could not be opened, otherwise the offset at
+which reading will start.
 
 =cut
 
@@ -164,13 +164,15 @@ sub open {
 	    return undef;
 	};
 	$me->_read_into_buffer();               # read 1st chunk into buffer
-	if ($me->{position} > 0 and @{$me->{_buffer}} and $me->{_1st_entry} eq ${$me->{_buffer}}[0]) {
+	if ($me->{position} > 0 and @{$me->{_buffer}} and
+	    $me->{_1st_entry}   eq  ${$me->{_buffer}}[0]) {
 	    # This is the same file as last time (i.e. the 1st entry
 	    # is unmodified) and _load_resume_data() above set
 	    # {position} to a positive value, indicating that this is
 	    # a resumed read. Thus we seek forward in file here.
 	    defined(sysseek $me->{_filehandle}, $me->{position}, 0) or
-		croak "Failed to seek to byte $me->{position} in file `$me->{filename}': $!";
+		croak "Failed to seek to byte $me->{position} in file " .
+		    "`$me->{filename}': $!";
 	    $me->{_buffer} = [];
 	    $me->_read_into_buffer();
 	} else {
@@ -192,7 +194,7 @@ sub open {
         $me->{position} = 0;
     }
     unshift @{ $me->{_buffer} }, '';
-    return $me;
+    return $me->{position};
 }
 
 

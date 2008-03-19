@@ -9,3 +9,6 @@ Revision history for Perl extension Log::Parse.
 0.02  Thu Jan 17 10:48:00 2008
 	- added contrib/kredconvert
 	- added some FIXMEs
+
+0.03  Thu Jan 21 12:20:57 2008
+	- open() now returns offset at which reading will start

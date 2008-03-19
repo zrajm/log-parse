@@ -139,6 +139,16 @@ my $log = Log::Parse->new(
     },
 );
 
+# FIXME: Atomic updates. Ctrl-C, and then resume should cause no more
+# to be written than a single, uninterrupted pass: Copy destfile to
+# destfile.tmp, write to the tempfile. If interrupted/killed, delete
+# the tempfile -- if not, move tempfile to original file. (Bad,
+# because takes much extra dispace? And copying back and forth is
+# slow?)
+#
+# Or, maybe, don't muck about with tempfiles, just save current offset
+# on receiving SIGINT. (Bad, because SIGKILL will leave the output
+# files in a bess).
 
 
 my $fh = undef;                                 #
@@ -151,7 +161,7 @@ foreach my $file (@ARGV) {                      # for each argument/file
 	my $outfile = "$output_dir/$date/$base.log";
 	my $outdir  = "$output_dir/$date";      #
 	if ($outfile ne $lastfile) {
-	    progress($outfile) if $progress;
+	    progress("$file->$outfile") if $progress;
 	    defined($fh) and close $fh;
 	    -d "$outdir" or mkdir $outdir;
 	    open $fh, '>>', $outfile;
