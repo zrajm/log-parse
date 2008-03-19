@@ -1,3 +1,4 @@
+#!/usr/bin/perl
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl Log-Parse.t'
 
@@ -66,7 +67,7 @@ isa_ok   ( $obj->{entry_callback},       'CODE',       '  {entry_callback}');
 is       ( $obj->{entry_regex},          qr/^(.)(.)$/m,'  {entry_regex}');
 is       ( $obj->{resume_dir},           '',           '  {resume_dir}');
 is       ( $obj->{filename},             undef,        '  {filename}');
-isnt     ( $obj->open($file),            undef,        'open() - numbered lines file');
+is       ( $obj->open($file),            '0 but true', 'open() - numbered lines file');
 $statefile ="$obj->{resume_dir}$obj->{filename}";
 is_deeply([$obj->read()],              [ "1a\n",'1:a'],'read() 1st line' );
 is_deeply([$obj->read()],              [ "2b\n",'2:b'],'read() 2nd line' );
@@ -79,7 +80,7 @@ isnt     ( $obj->close(),                undef,        'close()');
 msg "empty file";
 system "echo -n >$file";
 isa_ok   ( $obj = Log::Parse->new(),     'Log::Parse', 'new()');
-isnt     ( $obj->open($file),            undef,        'open() - empty file');
+is       ( $obj->open($file),            '0 but true', 'open() - empty file');
 is       ( $obj->read(),                 undef,        'read()');
 is       ( $obj->read(),                 undef,        'read()');
 isnt     ( $obj->close(),                undef,        'close()');
@@ -94,7 +95,7 @@ isa_ok   ( $obj->{entry_callback},       'CODE',       '  {entry_callback}');
 is       ( $obj->{entry_regex},          qr/^()/m,     '  {entry_regex}');
 is       ( $obj->{resume_dir},           '',           '  {resume_dir}');
 is       ( $obj->read(),                 undef,        '  read() before open()');
-isnt     ( $obj->open($file),            undef,        'open() - numbered lines file');
+is       ( $obj->open($file),            '0 but true', 'open() - numbered lines file');
 $statefile ="$obj->{resume_dir}$obj->{filename}";
 is       ( $obj->{filename},             full($file),  '  {filename} is absolute');
 is       ( $obj->{_1st_entry},           "1a\n",       '  {_1st_entry}');
@@ -110,7 +111,7 @@ isa_ok   ( $obj->{entry_callback},       'CODE',       '  {entry_callback}');
 is       ( $obj->{entry_regex},          qr/^()/m,     '  {entry_regex}');
 is       ( $obj->{resume_dir},           '',           '  {resume_dir}');
 is       ( $obj->read(),                 undef,        '  read() before open()');
-isnt     ( $obj->open($file),            undef,        'open() - numbered lines file');
+is       ( $obj->open($file),            '0 but true', 'open() - numbered lines file');
 is       ( $obj->{filename},             full($file),  '  {filename} is absolute');
 is       ( $obj->{_1st_entry},           "1a\n",       '  {_1st_entry}');
 is       ( $obj->{position},             0,            '  {position} is zero');
@@ -145,7 +146,7 @@ is       ( $obj->{buffer_size},          1048576,      '  {buffer_size}');
 isa_ok   ( $obj->{entry_callback},       'CODE',       '  {entry_callback}');
 is       ( $obj->{entry_regex},          qr/^()/m,     '  {entry_regex}');
 is       ( $obj->{resume_dir},           full($dir),   '  {resume_dir}');
-isnt     ( $obj->open($file),            undef,        'open() - numbered lines file');
+is       ( $obj->open($file),            '0 but true', 'open() - numbered lines file');
 $statefile ="$obj->{resume_dir}$obj->{filename}";
 is       ( $obj->{filename},             full($file),  '  {filename} is absolute');
 is       ( $obj->{_1st_entry},           "1a\n",       '  {_1st_entry}');
@@ -160,7 +161,7 @@ msg "clobbering logfile";
 system "echo 3c >$file";
 system "echo 4d >>$file";
 isa_ok   ( $obj = Log::Parse->new(%opt), 'Log::Parse', 'new() - object reinit -');
-isnt     ( $obj->open($file),            undef,        'open()');
+is       ( $obj->open($file),            '0 but true', 'open()');
 is       ( $obj->{filename},             full($file),  '  {filename} is absolute');
 is       ( $obj->{_1st_entry},           "3c\n",       '  {_1st_entry}');
 is       ( $obj->{position},             0,            '  {position} is zero');
@@ -171,7 +172,7 @@ isnt     ( $obj->close(),                undef,        'close()');
 #is       (`cat "$statefile.1st"`,        "3c\n",       '  {_1st_entry} savefile');
 
 isa_ok   ( $obj = Log::Parse->new(%opt), 'Log::Parse', 'new() - object reinit -');
-isnt     ( $obj->open($file),            undef,        'open()');
+is       ( $obj->open($file),            3,            'open()');
 is       ( $obj->{filename},             full($file),  '  {filename} is absolute');
 is       ( $obj->{_1st_entry},           "3c\n",       '  {_1st_entry}');
 is       ( $obj->{position},             3,            '  {position} retained');
@@ -182,7 +183,7 @@ isnt     ( $obj->close(),                undef,        'close()');
 #is       (`cat "$statefile.1st"`,        "3c\n",       '  {_1st_entry} savefile');
 
 isa_ok   ( $obj = Log::Parse->new(%opt), 'Log::Parse', 'new() - object reinit -');
-isnt     ( $obj->open($file),            undef,        'open()');
+is       ( $obj->open($file),            6,            'open()');
 is       ( $obj->{filename},             full($file),  '  {filename} is absolute');
 is       ( $obj->{_1st_entry},           "3c\n",       '  {_1st_entry}');
 is       ( $obj->{position},             6,            '  {position} retained');
@@ -196,7 +197,7 @@ msg "added extra line to logfile `$file'";
 system "echo '5e' >>$file"; # 
 
 isa_ok   ( $obj = Log::Parse->new(%opt), 'Log::Parse', 'new() - object reinit -');
-isnt     ( $obj->open($file),            undef,        'open()');
+is       ( $obj->open($file),            6,            'open()');
 is       ( $obj->{filename},             full($file),  '  {filename} is absolute');
 is       ( $obj->{_1st_entry},           "3c\n",       '  {_1st_entry}');
 is       ( $obj->{position},             6,            '  {position} retained');
@@ -211,7 +212,7 @@ system "rm -fr $dir";
 
 close STDERR;
 is       ( $obj->open($file),            undef,        'open() - on non-existing file' );
-is       ( $obj->close(),                undef,        '  close()');
+is       ( $obj->close(),                '',           '  close()');
 
 
 # FIXME: need tests for reading standard input

@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Log-Parse
-version:             0.03
+version:             0.04
 abstract:            Parse log files incrementally, extracting dates/times
 license:             ~
 generated_by:        ExtUtils::MakeMaker version 6.36

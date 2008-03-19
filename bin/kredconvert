@@ -1,9 +1,13 @@
 #!/usr/bin/perl -w
 
 # [2007-12-12] /Zrajm C Akfohg
-
+#
+# [2008-03-12, 04:47-04:55] v1.0.1 - Implemented `--verbose' option.
+#
 # FIXME: Use module for keeping multiple (output) files open.
+#
 # FIXME: Sorting of output?
+
 
 use strict;
 use lib do {        # add script's directory to @INC
@@ -35,19 +39,18 @@ Read KREDLOG(s), write new kredlogs with date-based filenames in DESTDIR.
   -h, --help                display this help and exit
   -p, --progress            show current file on STDERR (default)
   -P, --no-progress         disable progress
+  -v, --verbose             output progress report on STDOUT
 
-$mybin converts logs written with sequential filenames (as outputted
-by the kred system) to logs with date based filenames.
+$mybin converts logs written with sequential filenames (as outputted by the kred
+system) to logs with date based filenames.
 
-Output filename: Basename of the input file is stripped of any .NUMBER
-suffix (if any), and the date (in .YYYYMMDD format) of each logentry
-is added to the output file.
+Output filename will be YYYY-MM/KREDLOGFILE (with any .NUMBER suffix stripped).
+YYYY and MM is taken from each logentry.
 
-If a file has grown since it was last processed, $mybin will continue
-to parse the file where the last invocation left off. However, if the
-file has been clobbered/rewritten since then (i.e. the first log entry
-differs from the old version), the file will instead be read from the
-beginning.
+If a file has grown since it was last processed, $mybin will continue to parse
+the file where the last invocation left off. However, if the file has been
+clobbered/rewritten since then (i.e. the first log entry differs from the old
+version), the file will instead be read from the beginning.
 EOF
     exit;
 }
@@ -56,7 +59,7 @@ EOF
 # display "twirling baton" on STDERR
 sub progress(;$) {
     my ($string) = @_;
-    print STDERR ">$string\e[K\r";
+    print STDERR " $string\e[K\r";
     return $string eq '' ? FALSE : TRUE;
 }
 
@@ -67,7 +70,7 @@ sub progress(;$) {
 ############
 
 # parse command line options
-my ($progress, $force) = (undef, FALSE);
+my ($progress, $force, $verbose) = (undef, FALSE, FALSE);
 {
     my ($badargs, @arg) = (0);
     while (@ARGV) {
@@ -76,6 +79,7 @@ my ($progress, $force) = (undef, FALSE);
 	m/^(-f|--force)$/       and do { $force     = TRUE;  next };
 	m/^(-p|--progress)$/    and do { $progress  = TRUE;  next };
 	m/^(-P|--no-progress)$/ and do { $progress  = FALSE; next };
+        m/^(-v|--verbose)$/     and do { $verbose   = TRUE;  next };
 	m/^--$/ and last;
 	m/^-./  and do { warn "$0: unknown option `$_'\n"; $badargs ++; next; };
 	push @arg, $_;
@@ -102,11 +106,12 @@ if (-e $output_dir and not -d "$output_dir/$resume_dir" and not $force) {
 $resume_dir = "$output_dir/$resume_dir";
 system "mkdir -p $resume_dir";
 
-# default "progress" behaviour
-$progress = (-t STDERR) ? TRUE : FALSE
-    unless defined($progress);
-
-
+# default `--progress' behaviour
+if (not defined($progress)) {
+    $progress = FALSE if $verbose;
+    $progress = (-t STDERR) ? TRUE : FALSE
+       unless defined($progress);
+}
 
 
 ############
@@ -148,8 +153,7 @@ my $log = Log::Parse->new(
 #
 # Or, maybe, don't muck about with tempfiles, just save current offset
 # on receiving SIGINT. (Bad, because SIGKILL will leave the output
-# files in a bess).
-
+# files in a mess).
 
 my $fh = undef;                                 #
 foreach my $file (@ARGV) {                      # for each argument/file
@@ -162,6 +166,7 @@ foreach my $file (@ARGV) {                      # for each argument/file
 	my $outdir  = "$output_dir/$date";      #
 	if ($outfile ne $lastfile) {
 	    progress("$file->$outfile") if $progress;
+	    print "`$file' -> `$outfile'\n" if $verbose;
 	    defined($fh) and close $fh;
 	    -d "$outdir" or mkdir $outdir;
 	    open $fh, '>>', $outfile;

@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 
 use vars qw($VERSION); # FIXME: why this line?
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 NAME
 
@@ -139,28 +139,32 @@ sub _clear {
 
 =item $offset = $obj->open($file);
 
-Opens a new logfile (or, if $file is the empty string, standard input)
-for reading. If in resume mode (see B<new()>), B<resume_dir> is set,
-and file has not been overwritten since last read, reading will
-continue reading where it last left off (similar to "tail -f").
+Opens a new logfile (or, if $file is set to `-', standard input) for reading
+(use `./-' if you want to open a file literally called `-'). If in resume mode
+(see B<new()>), B<resume_dir> is set, and file has not been overwritten since
+last read, reading will continue reading where it last left off (similar to
+"tail -f").
 
-Returns undef if file could not be opened, otherwise the offset at
-which reading will start.
+Returns the undef on error ($! is set to whatever sysopen set it to, so check
+there for failure reason) or otherwise the offset at which reading will begin.
+If file is to be read from the beginning it returns "0 but true" (This string is
+true in boolean context and 0 in numeric context. It is also exempt from the
+normal B<-w> warnings on improper numeric conversions.)
 
 =cut
 
 sub open {
     my ($me, $file) = @_;
     defined($me->{_filehandle}) and $me->close();
-    if (defined($file) and $file ne '') {  # open a file
+    if (defined($file) and $file ne '-') {  # open a file
 	# make file absolute path
 	use File::Spec;
 	($file) = File::Spec->rel2abs($file) =~ /^(.*)$/;
 	$me->{filename} = $file;
 	$me->_load_resume_data();
 	use Fcntl 'O_RDONLY';
-	sysopen $me->{_filehandle}, $me->{filename}, O_RDONLY or do {
-	    carp "Cannot open file `$me->{filename}' for reading: $!,";
+	defined(sysopen $me->{_filehandle}, $me->{filename}, O_RDONLY) or do {
+	    $me->{_filehandle} = undef;
 	    return undef;
 	};
 	$me->_read_into_buffer();               # read 1st chunk into buffer
@@ -187,14 +191,18 @@ sub open {
 	}
 	$me->{filename}    = '';
 	$me->{_filehandle} = *STDIN;
+	# FIXME: add seeking by reading past stuff
+	# (but under what filename should the STDIN be saved under in resume dir?)
 	if ($me->{resume_dir}) {
 	    carp "Cannot do resumed read: Seek not possible on standard input";
 	    $me->{resume_dir} = '';
 	}
-        $me->{position} = 0;
+	$me->_read_into_buffer();               # read 1st chunk into buffer
+	$me->{_1st_entry} = ${$me->{_buffer}}[0];   # store 1st entry
+	$me->{position}   = 0;
     }
     unshift @{ $me->{_buffer} }, '';
-    return $me->{position};
+    return $me->{position} == 0 ? '0 but true' : $me->{position};
 }
 
 
@@ -304,6 +312,63 @@ sub _save_resume_data {
 }
 
 
+=item $obj->close();
+
+Close the file. Closing a file causes the C<resume_dir> files to be
+written. Any previously opened files is automatically B<close()>d when
+you B<open()> a new one -- but make sure that you close your last file
+before exiting, or you will lose the B<resume_dir> data for that file!
+
+Returns true if file was successfully closed, false otherwise. If close()
+returned false $! is set.
+
+=cut
+
+sub close {
+    my ($me) = @_;
+    # Avoid "Can't use an undefined value as a symbol reference" error by
+    # emulating what happens if you try to close a non-existing filehandle.
+    if (not defined $me->{_filehandle}) {       # no filehandle defined
+	use Errno 'EBADF';                      #   see errno(3)
+	$! = EBADF;                             #   $! = "Bad file descriptor"
+	return '';                              #   return false
+    }                                           #
+    my $ret   = close($me->{_filehandle});      # close
+    my $errno = $!;                             # remember close ERRNO
+    if (defined($ret) && $ret ne '') {          # if close worked
+	$me->_save_resume_data();               #   save resume data
+    }                                           #
+    $me->_clear();                              # clear variables
+    $! = $errno;                                # restore close ERRNO
+    return $ret;                                #
+}                                               #
+
+
+=item $obj->position();
+
+Returns the position where the next read() will start in the currently open
+file. If at the beginning of the file returns "0 but true" (This string is true
+in boolean context and 0 in numeric context. It is also exempt from the normal
+B<-w> warnings on improper numeric conversions.)
+
+Returns false (empty string) If no file is currently open.
+
+FIXME: Is position returned in bytes or in characters?
+
+=cut
+
+sub position {
+    my ($me) = @_;
+    return '' unless defined($me->{_filehandle});
+    return $me->{position} == 0 ? '0 but true' : $me->{position};
+}
+
+
+=item $obj->apply();
+
+FIXME.
+
+=cut
 
 sub apply {
     my ($me) = @_;
@@ -313,34 +378,6 @@ sub apply {
     } else {
         return ${ $me->{_buffer} }[0];
     }
-}
-
-
-=item $obj->close();
-
-Close the file. Closing a file causes the C<resume_dir> files to be
-written. Any previously opened files is automatically B<close()>d when
-you B<open()> a new one -- but make sure that you close your last file
-before exiting, or you will lose the B<resume_dir> data for that file!
-
-=cut
-
-sub close {
-    my ($me) = @_;
-    not defined($me->{_filehandle}) and do {
-	carp "cannot close file: no file open";
-	return undef;
-    };
-    close($me->{_filehandle}) or do {
-	# FIXME: handle when {_filehandle} being read from a pipe, and
-	# command exits with non-zero exit status ($!==0, and $? ==
-	# exit status)
-	carp "cannot close file `$me->{filename}': $!";
-	return undef;
-    };
-    $me->_save_resume_data();
-    $me->_clear();
-    return 1;
 }
 
 1;
