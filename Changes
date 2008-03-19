@@ -1,22 +1,21 @@
 Revision history for Perl extension Log::Parse.
 
-0.01  Thu Jan 17 03:49:25 2008
+0.01  Thu Jan 17 03:49:25 CET 2008
 	- original version; created by h2xs 1.23 with options X -n Log::Parse
 	- imported module code + unit tests from source written earlier. 1st
           release.
 
-0.02  Thu Jan 17 10:48:00 2008
+0.02  Thu Jan 17 10:48:00 CET 2008
 	- added contrib/kredconvert
 	- added some FIXMEs
 
-0.03  Thu Jan 21 12:20:57 2008
+0.03  Thu Jan 21 12:20:57 CET 2008
 	- open() now returns offset at which reading will start
 
-0.04  Thu Feb 3 11:28:04 2008
+0.04  Thu Feb 3 11:28:04 CET 2008
 	- renamed "contrib" directory "bin"
         - added unit tests for open() return values
         - started re-working of "kredgrep"
-
         - "kredgrep" is now fully functional
         - open() no longer carps if sysopen() fails, but sets $! and return
           whatever CORE::sysopen() returned so as to emulate perl-native open()
@@ -31,5 +30,12 @@ Revision history for Perl extension Log::Parse.
           common open('-') (to open a file literally called `-' one must now use
           `./-' or specify the full path)
 	- added position()
+        - bin/kredconvert: added `--verbose' option
+        - bin/kredconvert: changed `entry_regex' to better match some less
+          common cases
+
+0.05  Wed Mar 12 13:24:43 CET 2008
+        - Makefile.PL: now also installs executable files found in `bin/' on
+          `make install'
 
 [[eof]]

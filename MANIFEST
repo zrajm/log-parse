@@ -1,5 +1,8 @@
-Changes
 Makefile.PL
+lib/Log/Parse.pm
+t/Log-Parse.t
+Changes
+INSTALL
 MANIFEST
 README
 TODO
@@ -7,6 +10,4 @@ bin/kred2hashed
 bin/kredconvert
 bin/kredgrep
 bin/kredsort_FIXME
-t/Log-Parse.t
-lib/Log/Parse.pm
 META.yml                                 Module meta-data (added by MakeMaker)

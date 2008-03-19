@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 
 use vars qw($VERSION); # FIXME: why this line?
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 =head1 NAME
 

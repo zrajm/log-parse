@@ -1,9 +1,17 @@
 TODO:
 
-  * "kredgrep" now depends on Term::ReadKey -- how should this be indicated in
-    the CPAN distribution?
+  * `bin/kredconvert' results in spurious `Use of uninitialized value in print
+    at /usr/local/share/perl/5.8.8/Log/Parse.pm line 279.' messages. It is
+    apparently _save_scalar() that is sometimes fed undef instead of real data.
+    Where does this come from? And does it result in bad things?
 
-  * Make sure kredconvert still works after changes to Log/Parse.pm
+  * `bin/kredgrep' now depends on Term::ReadKey and Term::ANSIColor which are
+    not included in the standard Perl distribution -- how should this be
+    indicated in the CPAN distribution? -- Right now it's just mentioned in
+    INSTALL, should it be put somewhere else, so as to automate installation
+    when doing a CPAN install?
+
+  * add tests for `bin/kredgrep' and `bin/kredconvert'
 
   * (optionally) split on list of regexes (if it is faster with REGEX1 ||
     REGEX2, than just plain /(REGEX1|REGEX2)/
@@ -13,25 +21,30 @@ TODO:
   * Proper unit test for close() implicit when open()ing new file
 
   * Should warn a file was opened/read without finding any matching
-    "entry_regex"es
+    `entry_regex':es
 
-  * "mkdir -p" is called using system, could this be done with only
-    Perl code?
+  * `mkdir -p' is called using system, could this be done using only Perl-native
+    code?
 
-  * could read() be made more efficient? (The chunked reading
-    implemented now is quite a lot faster than the most obvious
-    readline() approach.)
+  * could read() be made more efficient? (The chunked reading implemented now is
+    quite a lot faster than the most obvious readline() approach.)
 
   * Processing of standard input:
 
     o Add a whole lot of unit tests on stdin!
 
-    o Proper error messages (esp. if user tries to use "resume_dir"
-      function. -- Is there any situation where this makes sense on
-      standard input? Should we read forward to resume point, instead
-      of seeking, or will this never be used? [I'm inclined to believe
-      this will never be used.])
+    o Proper error messages (esp. if user tries to use `resume_dir' function. --
+      Is there any situation where this makes sense on standard input? Should we
+      read forward to resume point, instead of seeking, or will this never be
+      used? [I'm inclined to believe this will never be used.])
 
-/zrajm [2008-01-17] -- [2008-02-03]
+    o When using kredgrep on non-existing file, I get bad error message.
+
+      $ kredgrep 'hej' 2008-01/estore.
+      kredgrep: Use of uninitialized value in addition (+) at /usr/local/bin/kredgrep line 568.
+      kredgrep: Cannot open file `2008-01/estore.': No such file or directory
+
+
+/zrajm [2008-01-17] -- [2008-03-12]
 
 [[eof]]

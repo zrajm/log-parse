@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Log-Parse
-version:             0.04
+version:             0.05
 abstract:            Parse log files incrementally, extracting dates/times
 license:             ~
 generated_by:        ExtUtils::MakeMaker version 6.36
@@ -10,4 +10,4 @@ meta-spec:
     url:     http://module-build.sourceforge.net/META-spec-v1.2.html
     version: 1.2
 author:
-    - Zrajm <zrajm@>
+    - Zrajm <zrajm@klingonska.org>

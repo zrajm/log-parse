@@ -2,12 +2,17 @@
 
 # [2007-12-12] /Zrajm C Akfohg
 #
-# [2008-03-12, 04:47-04:55] v1.0.1 - Implemented `--verbose' option.
+# [2008-03-12, 04:47-04:55] v1.0.1 - added `--verbose' option
+#
+# [2008-03-12, 12:28-12:30] v1.0.2 - changed `entry_regex' to something that'll
+# work on the sometimes occuring, slightly malformed logs (where the number for
+# seconds contain only one digit)
 #
 # FIXME: Use module for keeping multiple (output) files open.
 #
 # FIXME: Sorting of output?
-
+#
+# FIXME: Add POD.
 
 use strict;
 use lib do {        # add script's directory to @INC
@@ -17,7 +22,6 @@ use lib do {        # add script's directory to @INC
         $dir        = File::Spec->catdir(File::Spec->splitdir($dir));
     File::Spec->catpath($vol, $dir, '');
 };  
-use Term::ANSIColor;
 use Log::Parse;
 
 
@@ -122,6 +126,9 @@ if (not defined($progress)) {
 # Regex matching the following headers:
 #     == 7-Nov-2007::20:31:07 == [...]
 #     kred@lax      2007-02-13 23:15:05 [...]
+#     kred@lax      2005-05-24 02:30:0  [...]
+#       (digits for seconds may be one digit only in older logs! -- weirdly enough!)
+
 our %month = (
     Jan => 0,  Feb => 1,  Mar => 2,  Apr => 3,  May =>  4,  Jun =>  5,
     Jul => 6,  Aug => 7,  Sep => 8,  Oct => 9,  Nov => 10,  Dec => 11,
@@ -129,10 +136,14 @@ our %month = (
 my $month_re = join('|', keys %month);
 my $log = Log::Parse->new(
     resume_dir     => $resume_dir,
-    entry_regex    => qr/^[0-9a-z*=](?:
-        =[ ]\d\d?-($month_re)-(\d\d\d\d)::\d\d:\d\d:\d\d[ ]== |
-        (?:\w+[ ])?? (?:[*]+|\w+@\w+) [ ]+ (\d\d\d\d)-(\d\d)-\d\d[ ]\d\d:\d\d:\d\d
-    )[ ]/mox,
+    #entry_regex    => qr/^[0-9a-z*=](?:
+    #    =[ ]\d\d?-($month_re)-(\d\d\d\d)::\d\d:\d\d:\d\d[ ]== |
+    #    (?:\w+[ ])?? (?:[*]+|\w+@\w+) [ ]+ (\d\d\d\d)-(\d\d)-\d\d[ ]\d\d:\d\d:\d\d
+    #)[ ]/mox,
+    entry_regex => qr/^(?:
+        ==\s+ \d+-($month_re)-(\d+) :: \d+:\d+:\d+ \s+ |
+        (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-\d+ \s+ \d+:\d+:\d+ \s+
+    )/mox,
     entry_callback => sub {
 	# return date in YYYY-MM format
 	if (@_[0..1] ) {

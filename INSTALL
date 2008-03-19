@@ -1,0 +1,8 @@
+CAVEATS
+
+  * `bin/kredgrep' requires `Term::ReadKey' and `Term::ANSIColor'
+
+  * This module is only tested under Linux. If you find that it doesn't work on
+    your distro/platform please send me your changes and we'll fix that!
+
+[[eof]]

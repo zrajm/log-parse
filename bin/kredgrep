@@ -517,13 +517,12 @@ our %month = (
 my $month_re = join('|', keys %month);
 my $log = Log::Parse->new(
     entry_regex => qr/^(?:
-        ==\s+ (\d+)-($month_re)-(\d+) :: (\d+):(\d+):(\d+) \s+==\s+ |
+        ==\s+ (\d+)-($month_re)-(\d+) :: (\d+):(\d+):(\d+) \s+ |
         (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-(\d+) \s+ (\d+):(\d+):(\d+) \s+
     )/mox,
     entry_callback => sub {
-	# Feed all subexpressions from above "$entry_header_regex" to get the
-	# log entry's time in seconds since the epoch.
 	my @time = do {
+	    # return seconds since epoch
 	    if (@_[0..5]) {
 		(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
 	    } elsif (@_[6..11]) {
