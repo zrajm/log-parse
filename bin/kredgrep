@@ -304,31 +304,30 @@ Search KREDLOG(s) (or standard input) for entries containing PATTERN.
   -f, --force            delete output dir before searching
       --help             display this help and exit
   -i, --ignore-case      ignore case distinctions
+  -H, --with-filename    print the filename for each match
   -h, --no-filename      suppress the prefixing filename on output
-  -P, --no-progress      disable search progress display
   -o, --output-dir=DIR   write each matching log event into a
                          separate, numbered file in DIR
-  -p, --progress         show current file on STDOUT (default)
+  -P, --no-progress      disable search progress display
+  -p, --progress         progress bar STDOUT (default on terminal)
   -q, --quiet            don\'t output anything on STDOUT
   -v, --invert-match     select non-matching events
-  -H, --with-filename    print the filename for each match
   -w, --word-regexp      force PATTERN to match only whole words
 
 TIME is specified in "YYYY-MM-DD HH:MM:SS" format, but may be shortened from the
 end by any number of fields (though, minimally you must specify the year in four
 digit format).
 
-PATTERN is any valid perl regular expression (see "man perlre"). PATTERN may
-never be left off, but the empty pattern '' might be useful to return all
-entries matched by \`--before\' and/or \`--after\' options.
+PATTERN is a Perl regular expression (see "man perlre"), and may not be omitted.
+Use an empty pattern ("") to match anything (useful together with e.g. --before,
+--after and --count).
 
-To search for multiple PATTERNs without specifying order in which they must
-occur (as opposed to "PATTERN1.*PATTERN2") output of $0 may be piped into
-another instance of itself. I.e.:
+To search for logentries matching several PATTERNs in no particular order, pipe
+the output of $mybin to itself. E.g.:
 
-    cat KREDLOG | $0 PATTERN1 | $0 PATTERN2
+    cat SOME_KREDLOG | $mybin PATTERN1 | $mybin PATTERN2
 
-Exit status: 0 = matches found, 1 = no matches found, 5 = there were errors.
+Exit status: 0 = matches, 1 = no matches, 5 = errors.
 EOF
     exit;
 }
