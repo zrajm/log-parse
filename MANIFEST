@@ -1,0 +1,8 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+TODO
+t/Log-Parse.t
+lib/Log/Parse.pm
+META.yml                                 Module meta-data (added by MakeMaker)

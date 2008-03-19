@@ -1,0 +1,7 @@
+Revision history for Perl extension Log::Parse.
+
+0.01  Thu Jan 17 03:49:25 2008
+	- original version; created by h2xs 1.23 with options
+		-X -n Log::Parse
+	- imported module code + unit tests from source written
+          earlier. 1st release.

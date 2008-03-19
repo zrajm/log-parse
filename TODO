@@ -1,0 +1,21 @@
+TODO:
+
+  * Proper test for close() implicit when open()ing new file
+  * Should warn a file was opened/read without finding any matching
+    "entry_regex"es
+  * "mkdir -p" is called using system, could this be done with only
+    Perl code?
+  * could read() be made more efficient? (The chunked reading
+    implemented now is quite a lot faster than the most obvious
+    readline() approach.)
+  * Processing of standard input:
+    o Add a whole lot of unit tests on stdin!
+    o Proper error messages (esp. if user tries to use "resume_dir"
+      function. -- Is there any situation where this makes sense on
+      standard input? Should we read forward to resume point, instead
+      of seeking, or will this never be used? [I'm inclined to believe
+      this will never be used.])
+
+/zrajm [2008-01-17]
+
+[[eof]]
