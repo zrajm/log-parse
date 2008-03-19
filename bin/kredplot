@@ -51,12 +51,13 @@ use Time::Local;
 #     == 7-Nov-2007::20:31:07 == [...]
 #     kred@lax      2007-02-13 23:15:05 [...]
 #     kred@lax      2005-05-24 02:30:0  [...]
+#     kred@lax     2005-03-21 23:59:0 [...]
 #       (digits for seconds may be one digit only in older logs! -- weirdly enough!)
 
 our %month = (
-    Jan =>  1,  Feb =>  2,  Mar =>  3,  Apr =>  4,
-    May =>  5,  Jun =>  6,  Jul =>  7,  Aug =>  8,
-    Sep =>  9,  Oct => 10,  Nov => 11,  Dec => 12,
+    Jan =>  0,  Feb =>  1,  Mar =>  2,  Apr =>  3,
+    May =>  4,  Jun =>  5,  Jul =>  6,  Aug =>  7,
+    Sep =>  8,  Oct =>  9,  Nov => 10,  Dec => 11,
     );
 my $month_re = join('|', keys %month);
 my $log = Log::Parse->new(
@@ -65,16 +66,16 @@ my $log = Log::Parse->new(
         (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-(\d+) \s+ (\d+):(\d+):(\d+) \s+
     )/mox,
     entry_callback => sub {
-	my @time = do {
+	return do {
 	    # return seconds since epoch
-	    if (@_[0..5]) {
-		(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
-	    } elsif (@_[6..11]) {
-		(@_[11, 10, 9, 8, 7, 6]);
+	    if (defined $_[0]) {
+		timelocal(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
+	    } elsif (defined $_[6]) {
+		timelocal(@_[11, 10, 9, 8], $_[7]-1, $_[6]);
+	    } else {
+		0;
 	    }
 	};
-	$time[4] -= 1;
-	return @time == 6 ? timelocal(@time) : 0;
     },
 );
 
@@ -94,7 +95,8 @@ FILE: foreach my $infile (@ARGV) {              # for each input file
 	next FILE;
     };
     while (($_, my $epoch) = $log->read()) {    #   for each entry
-	print "$epoch $machine logevent 0 ?\n"; #
+        print "$epoch $machine logevent 0 ?\n"; #
+	print "    BAD: $infile: $_" if $epoch == 0;
     }                                           #
 }                                               #
 
