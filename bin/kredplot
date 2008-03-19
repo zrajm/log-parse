@@ -83,7 +83,9 @@ my $log = Log::Parse->new(
 FILE: foreach my $infile (@ARGV) {              # for each input file
     $infile =~ s/\/+$//;                        #   strip trailing slashes
     warn "$infile\n";
-    my ($machine) = $infile =~ m#/logs.([a-z]+)/#;
+    use Cwd 'abs_path';
+    my ($machine) = abs_path($infile) =~ m#/logs.([a-z]+)/#;
+    $machine = "unknown" unless defined($machine);
     if (-d $infile) {
 	warn "cannot open `$infile' for reading: File is a directory\n";
 	next;
