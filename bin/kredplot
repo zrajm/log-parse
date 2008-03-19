@@ -1,0 +1,101 @@
+#!/usr/bin/perl -w
+#
+# kredplot - generate simple opstat log from kredlogs
+#
+# [2008-03-19, 10:16-10:35] v0.1 - created from kredgrep
+#
+# This very simplistic script is just indended to be used for testing
+# my extracted kredlogs for gaps.
+#
+# It extracts the event times from a kredlog and generarates an opstat
+# log (with time in epoch seconds) which should be useful for doing
+# some frequency plotting of events in the kredlog.
+
+use strict;
+use lib do {        # add script's directory to @INC
+    use File::Spec; # to prettify path
+    use Cwd;        # to follow symlinks in path
+    my ($vol, $dir) = File::Spec->splitpath(Cwd::abs_path($0));
+        $dir        = File::Spec->catdir(File::Spec->splitdir($dir));
+    File::Spec->catpath($vol, $dir, '');
+};  
+use Log::Parse;
+use Time::Local;
+
+
+############
+##  Init  ##
+############
+
+
+%SIG = (
+    __DIE__  => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+	exit 5;
+    },
+    __WARN__ => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+    },
+);
+
+
+
+############
+##  Main  ##
+############
+
+
+# Regex matching the following headers:
+#     == 7-Nov-2007::20:31:07 == [...]
+#     kred@lax      2007-02-13 23:15:05 [...]
+#     kred@lax      2005-05-24 02:30:0  [...]
+#       (digits for seconds may be one digit only in older logs! -- weirdly enough!)
+
+our %month = (
+    Jan =>  1,  Feb =>  2,  Mar =>  3,  Apr =>  4,
+    May =>  5,  Jun =>  6,  Jul =>  7,  Aug =>  8,
+    Sep =>  9,  Oct => 10,  Nov => 11,  Dec => 12,
+    );
+my $month_re = join('|', keys %month);
+my $log = Log::Parse->new(
+    entry_regex => qr/^(?:
+        ==\s+ (\d+)-($month_re)-(\d+) :: (\d+):(\d+):(\d+) \s+ |
+        (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-(\d+) \s+ (\d+):(\d+):(\d+) \s+
+    )/mox,
+    entry_callback => sub {
+	my @time = do {
+	    # return seconds since epoch
+	    if (@_[0..5]) {
+		(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
+	    } elsif (@_[6..11]) {
+		(@_[11, 10, 9, 8, 7, 6]);
+	    }
+	};
+	$time[4] -= 1;
+	return @time == 6 ? timelocal(@time) : 0;
+    },
+);
+
+
+# main loop
+FILE: foreach my $infile (@ARGV) {              # for each input file
+    $infile =~ s/\/+$//;                        #   strip trailing slashes
+    warn "$infile\n";
+    my ($machine) = $infile =~ m#/logs.([a-z]+)/#;
+    if (-d $infile) {
+	warn "cannot open `$infile' for reading: File is a directory\n";
+	next;
+    }
+    # process one file
+    defined($log->open($infile)) or do {        #   open file
+	warn "Cannot open file `$infile': $!\n";
+	next FILE;
+    };
+    while (($_, my $epoch) = $log->read()) {    #   for each entry
+	print "$epoch $machine logevent 0 ?\n"; #
+    }                                           #
+}                                               #
+
+#[[eof]]
