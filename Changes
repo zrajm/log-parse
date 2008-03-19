@@ -5,3 +5,7 @@ Revision history for Perl extension Log::Parse.
 		-X -n Log::Parse
 	- imported module code + unit tests from source written
           earlier. 1st release.
+
+0.02  Thu Jan 17 10:48:00 2008
+	- added contrib/kredconvert
+	- added some FIXMEs

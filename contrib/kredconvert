@@ -1,0 +1,166 @@
+#!/usr/bin/perl -w
+
+# [2007-12-12] /Zrajm C Akfohg
+
+# FIXME: Use module for keeping multiple (output) files open.
+# FIXME: Sorting of output?
+
+use strict;
+use lib do {        # add script's directory to @INC
+    use File::Spec; # to prettify path
+    use Cwd;        # to follow symlinks in path
+    my ($vol, $dir) = File::Spec->splitpath(Cwd::abs_path($0));
+        $dir        = File::Spec->catdir(File::Spec->splitdir($dir));
+    File::Spec->catpath($vol, $dir, '');
+};  
+use Term::ANSIColor;
+use Log::Parse;
+
+
+
+############
+##  Subs  ##
+############
+
+
+sub TRUE()  { 1  }
+sub FALSE() { '' }
+sub help()  {
+    (my $mybin = $0) =~ s{^.*/}{};
+    print <<EOF;
+Usage: $mybin [OPTION]... KREDLOGFILE... DESTDIR
+Read KREDLOG(s), write new kredlogs with date-based filenames in DESTDIR.
+
+  -f, --force               overwrite non-kredlog directory (if DESTDIR)
+  -h, --help                display this help and exit
+  -p, --progress            show current file on STDERR (default)
+  -P, --no-progress         disable progress
+
+$mybin converts logs written with sequential filenames (as outputted
+by the kred system) to logs with date based filenames.
+
+Output filename: Basename of the input file is stripped of any .NUMBER
+suffix (if any), and the date (in .YYYYMMDD format) of each logentry
+is added to the output file.
+
+If a file has grown since it was last processed, $mybin will continue
+to parse the file where the last invocation left off. However, if the
+file has been clobbered/rewritten since then (i.e. the first log entry
+differs from the old version), the file will instead be read from the
+beginning.
+EOF
+    exit;
+}
+
+
+# display "twirling baton" on STDERR
+sub progress(;$) {
+    my ($string) = @_;
+    print STDERR ">$string\e[K\r";
+    return $string eq '' ? FALSE : TRUE;
+}
+
+
+
+############
+##  Init  ##
+############
+
+# parse command line options
+my ($progress, $force) = (undef, FALSE);
+{
+    my ($badargs, @arg) = (0);
+    while (@ARGV) {
+	local $_ = shift;
+	m/^(-h|--help)$/        and do { help };
+	m/^(-f|--force)$/       and do { $force     = TRUE;  next };
+	m/^(-p|--progress)$/    and do { $progress  = TRUE;  next };
+	m/^(-P|--no-progress)$/ and do { $progress  = FALSE; next };
+	m/^--$/ and last;
+	m/^-./  and do { warn "$0: unknown option `$_'\n"; $badargs ++; next; };
+	push @arg, $_;
+    }
+    unshift @ARGV, @arg;
+    exit 5 if $badargs;
+}
+if (not @ARGV) {
+    warn "$0: Not enough arguments\n";
+    warn "Try `$0 --help' for more information.\n";
+    exit 5;
+}
+
+my $output_dir = pop @ARGV;
+$output_dir =~ s{/+$}{};
+my $resume_dir = ".kredlogconvert";
+
+if (-e $output_dir and not -d "$output_dir/$resume_dir" and not $force) {
+    warn "$0: Destination directory exists, but does not appear to be a kredlog directory\n";
+    warn "(Is not a directory, or does not contain a `$resume_dir' subdirectory.)\n";
+    exit 5;
+}
+
+$resume_dir = "$output_dir/$resume_dir";
+system "mkdir -p $resume_dir";
+
+# default "progress" behaviour
+$progress = (-t STDERR) ? TRUE : FALSE
+    unless defined($progress);
+
+
+
+
+############
+##  Main  ##
+############
+
+
+# Regex matching the following headers:
+#     == 7-Nov-2007::20:31:07 == [...]
+#     kred@lax      2007-02-13 23:15:05 [...]
+our %month = (
+    Jan => 0,  Feb => 1,  Mar => 2,  Apr => 3,  May =>  4,  Jun =>  5,
+    Jul => 6,  Aug => 7,  Sep => 8,  Oct => 9,  Nov => 10,  Dec => 11,
+    );
+my $month_re = join('|', keys %month);
+my $log = Log::Parse->new(
+    resume_dir     => $resume_dir,
+    entry_regex    => qr/^[0-9a-z*=](?:
+        =[ ]\d\d?-($month_re)-(\d\d\d\d)::\d\d:\d\d:\d\d[ ]== |
+        (?:\w+[ ])?? (?:[*]+|\w+@\w+) [ ]+ (\d\d\d\d)-(\d\d)-\d\d[ ]\d\d:\d\d:\d\d
+    )[ ]/mox,
+    entry_callback => sub {
+	# return date in YYYY-MM format
+	if (@_[0..1] ) {
+	    return sprintf "%04u-%02u", $_[1], $month{$_[0]}+1;
+	} elsif (@_[2..3]) {
+	    return sprintf "%04u-%02u", @_[2,3];
+	}
+	return '';
+    },
+);
+
+
+
+my $fh = undef;                                 #
+foreach my $file (@ARGV) {                      # for each argument/file
+    my ($base, $lastfile) = ($file, '');        #
+    $base =~ s{^.*/}{};                         #   strip path
+    $base =~ s{\.\d*$}{};                       #   strip number extension
+    $log->open($file);                          #
+    while (my ($entry, $date) = $log->read()) { #
+	my $outfile = "$output_dir/$date/$base.log";
+	my $outdir  = "$output_dir/$date";      #
+	if ($outfile ne $lastfile) {
+	    progress($outfile) if $progress;
+	    defined($fh) and close $fh;
+	    -d "$outdir" or mkdir $outdir;
+	    open $fh, '>>', $outfile;
+	}
+	print $fh $entry;
+	$lastfile = $outfile;
+    }
+    $log->close();
+}
+defined($fh) and close $fh;
+
+#[[eof]]

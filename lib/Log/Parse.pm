@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 
 use vars qw($VERSION); # FIXME: why this line?
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 NAME
 
@@ -265,6 +265,7 @@ sub _save_scalar {
 	    croak "Failed to create directory `$dir' for state file";
     }
     CORE::open my $fh, '>', $file or croak "Failed to open state file `$file' for writing: $!";
+    # FIXME: Use of uninitialized value in print at /usr/local/share/perl/5.8.8/Log/Parse.pm line 268.
     print $fh $data               or croak "Failed to write to state file `$file': $!";
     close $fh                     or croak "Failed to close state file `$file' after writing: $!";
     return 1;
