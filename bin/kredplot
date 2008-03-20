@@ -21,11 +21,27 @@ use lib do {        # add script's directory to @INC
 };  
 use Log::Parse;
 use Time::Local;
+use Term::ProgressMeter;
 
 
-############
-##  Init  ##
-############
+
+###############################################################################
+##                                                                           ##
+##  Informational Functions                                                  ##
+##                                                                           ##
+###############################################################################
+
+
+sub TRUE()  {  1 }
+sub FALSE() { '' }
+
+
+
+###############################################################################
+##                                                                           ##
+##  Initialization                                                           ##
+##                                                                           ##
+###############################################################################
 
 
 %SIG = (
@@ -79,10 +95,26 @@ my $log = Log::Parse->new(
 );
 
 
+my $progress = TRUE;
+my ($total_size, $bytes_read) = (0, 0);         #
+if ($progress) {                                #
+    foreach my $infile (@ARGV) {                # calc total size of all files
+	$total_size += (stat $infile)[7];       #   to search
+    }                                           #
+    $total_size = 1 if $total_size == 0;        # not zero (used in division)
+    Term::ProgressMeter::set(                   # invoke Term::ProgressMeter
+        update_interval => .1,                  #   every tenth of a seconds
+        max_value       => \$total_size,        #   reference to maximum count
+        current_value   => sub {                #
+	    $bytes_read + $log->position();     #
+	},                                      #
+   );                                           #
+}
+
 # main loop
 FILE: foreach my $infile (@ARGV) {              # for each input file
     $infile =~ s/\/+$//;                        #   strip trailing slashes
-    warn "$infile\n";
+#    warn "$infile\n";
     use Cwd 'abs_path';
     my ($machine) = abs_path($infile) =~ m#/logs.([a-z]+)/#;
     $machine = "unknown" unless defined($machine);
@@ -99,6 +131,8 @@ FILE: foreach my $infile (@ARGV) {              # for each input file
         print "$epoch $machine logevent 0 ?\n"; #
 	print "    BAD: $infile: $_" if $epoch == 0;
     }                                           #
+
+    $bytes_read += $log->position();            #
 }                                               #
 
 #[[eof]]

@@ -29,8 +29,6 @@ use lib do {        # add script's directory to @INC
 };  
 use Term::ANSIColor;
 use Time::Local;
-#use Time::HiRes 'alarm';             # progress bar needs this
-#use Term::ReadKey 'GetTerminalSize'; # progress bar needs this
 use Term::ProgressMeter;
 
 
@@ -574,8 +572,7 @@ my $log = Log::Parse->new(
 
 # progress bar stuff
 my ($on_screen, $term_width) = (FALSE, FALSE);  #
-my $total_size = 0;                             #
-my $bytes_read = 0;
+my ($total_size, $bytes_read) = (0, 0);         #
 if ($progress) {                                #
     foreach my $infile (@ARGV) {                # calc total size of all files
 	$total_size += (stat $infile)[7];       #   to search
