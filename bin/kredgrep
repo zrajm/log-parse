@@ -2,12 +2,14 @@
 
 # [2007-12-12] - [2008-02-02] /Zrajm C Akfohg
 #
-# FIXME: statusbar in percent (of total bytes to read) -- also time based, i.e.
-# updated say, once or twice a second, but not more often
-#
-# FIXME: lzma/gz/bz2 etc support
+# FIXME: statusbar in percent (of total bytes to read) -- also time
+# based, i.e.  updated say, once or twice a second, but not more often
 #
 # FIXME: can the progress bar stuff be hidden away in a module?
+#
+# FIXME: Term::ANSIColor should not be called unless used, and even
+# then should fall back gracefully (i.e. simply disable coloured
+# output) if it does not exist
 #
 # FIXME: `cat hej2/* |./kredgrep 'Heid' - --color' causes:
 #
@@ -26,10 +28,18 @@ use lib do {        # add script's directory to @INC
     File::Spec->catpath($vol, $dir, '');
 };  
 use Term::ANSIColor;
-use Log::Parse;
 use Time::Local;
-use Time::HiRes 'alarm';             # progress bar needs this
-use Term::ReadKey 'GetTerminalSize'; # progress bar needs this
+#use Time::HiRes 'alarm';             # progress bar needs this
+#use Term::ReadKey 'GetTerminalSize'; # progress bar needs this
+use Term::ProgressMeter;
+
+
+###############################################################################
+##                                                                           ##
+##  Documentation                                                            ##
+##                                                                           ##
+###############################################################################
+
 
 =head1 NAME
 
@@ -254,8 +264,14 @@ specific settings, not shared by traditional B<grep>.
 
 This program, being written in perl, uses the B<perl> flavour of regexes.
 
-B<kredgrep> is distributed as a part of the B<Log::Parse> module, which it
-depends upon.
+
+=head1 PREREQUISITES
+
+Beyond the standard Perl installation B<kredgrep> requires the modules
+C<Term::ANSIColor> and C<Term::ReadKey> to work.
+
+It also requires the C<Log::Parse> module, which it is distributed
+with.
 
 
 =head1 SEE ALSO
@@ -282,12 +298,14 @@ Published under a Creative Commons Attribution-Share Alike 3.0 license.
 
 
 
-############
-##  Subs  ##
-############
+###############################################################################
+##                                                                           ##
+##  Informational Functions                                                  ##
+##                                                                           ##
+###############################################################################
 
 
-sub TRUE()  { 1  }
+sub TRUE()  {  1 }
 sub FALSE() { '' }
 sub help() {
     (my $mybin = $0) =~ s{^.*/}{};
@@ -333,6 +351,14 @@ EOF
 }
 
 
+
+###############################################################################
+##                                                                           ##
+##  Functions                                                                ##
+##                                                                           ##
+###############################################################################
+
+
 # write list of stuff to file
 sub save_list($@) {
     my ($file, @list) = @_;
@@ -356,9 +382,11 @@ sub parse_time {
 
 
 
-############
-##  Init  ##
-############
+###############################################################################
+##                                                                           ##
+##  Initialization                                                           ##
+##                                                                           ##
+###############################################################################
 
 
 %SIG = (
@@ -514,33 +542,25 @@ if ($output_dir ne '') {
 	die "Can't create output directory: $!\n";
 }
 
-
-
-############
-##  Main  ##
-############
-
-
-# Regex matching the following headers:
-#     == 7-Nov-2007::20:31:07 == [...]
-#     kred@lax      2007-02-13 23:15:05 [...]
-#     kred@lax      2005-05-24 02:30:0  [...]
-#       (digits for seconds may be one digit only in older logs! -- weirdly enough!)
-
+# init Log::Parse for kredlogs
+use Log::Parse;
 our %month = (
-    Jan =>  0,  Feb =>  1,  Mar =>  2,  Apr =>  3,
-    May =>  4,  Jun =>  5,  Jul =>  6,  Aug =>  7,
-    Sep =>  8,  Oct =>  9,  Nov => 10,  Dec => 11,
+    Jan => 0,  Feb => 1,  Mar => 2,  Apr => 3,  May =>  4,  Jun =>  5,
+    Jul => 6,  Aug => 7,  Sep => 8,  Oct => 9,  Nov => 10,  Dec => 11,
 );
 my $month_re = join('|', keys %month);
 my $log = Log::Parse->new(
+    # logevent headers matched:
+    #   == 7-Nov-2007::20:31:07 == [...]
+    #   kred@lax      2007-02-13 23:15:05 [...]
+    #   kred@lax      2005-05-24 02:30:0  [...]
     entry_regex => qr/^(?:
         ==\s+ (\d+)-($month_re)-(\d+) :: (\d+):(\d+):(\d+) \s+ |
         (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-(\d+) \s+ (\d+):(\d+):(\d+) \s+
     )/mox,
     entry_callback => sub {
+	# return seconds since epoch (zero on error)
 	return do {
-	    # return seconds since epoch (or zero on error)
 	    if (defined $_[0]) {
 		timelocal(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
 	    } elsif (defined $_[6]) {
@@ -552,104 +572,58 @@ my $log = Log::Parse->new(
     },
 );
 
-
-# display search results on standard output,
-sub results {                                   #
-    my ($on_screen, $string) = @_;              #
-    # FIXME: under which conditions should the progress bar be erased? (if
-    # stdout is redirected to file, and stderr is not, then there's no reason to
-    # erase it)
-    if ($on_screen && -t STDOUT) {              # erase progress bar
-	print STDERR "\e[K";                    #   (if currently displayed)
-	$on_screen = FALSE;                     #
-    }                                           #
-    print $string;                              # output on stdout
-}                                               #
-
 # progress bar stuff
 my ($on_screen, $term_width) = (FALSE, FALSE);  #
 my $total_size = 0;                             #
+my $bytes_read = 0;
 if ($progress) {                                #
-    sub term_width {                            #
-	$term_width = (Term::ReadKey::GetTerminalSize())[0]-1;
-    }                                           #
-    $SIG{WINCH} = \&term_width;                 # on window resize
-    term_width();                               #
-    $SIG{INT} = $SIG{TERM} = sub {              # on kill or ^C
-	results($on_screen, '');                #   erase progress bar if any
-	exit 255;                               #
-    };                                          #
     foreach my $infile (@ARGV) {                # calc total size of all files
 	$total_size += (stat $infile)[7];       #   to search
     }                                           #
     $total_size = 1 if $total_size == 0;        # not zero (used in division)
+    Term::ProgressMeter::set(                   # invoke Term::ProgressMeter
+        update_interval => .1,                  #   every tenth of a seconds
+        max_value       => \$total_size,        #   reference to maximum count
+        current_value   => sub {                #
+	    $bytes_read + $log->position();     #
+	},                                      #
+   );                                           #
 } else {                                        #
     $SIG{INT} = $SIG{TERM} = sub {              # on kill or ^C
 	exit 255;                               #
     };                                          #
 }                                               #
 
-
-sub estimate(\@$$) {
-    my ($value_ref, $new_value, $length) = @_;
-    push @$value_ref, $new_value;
-    shift @$value_ref
-	while @$value_ref > $length;
-    my $sum  = 0;
-    $sum    += $_ foreach @$value_ref;
-    return $sum / @$value_ref;
-}
-
-
 # create regex to search for
 $regex = "\b$regex\b"    if $word_regexp;
 $regex = qr/(?i:$regex)/ if $ignore_case;
 $regex = '' unless defined($regex);
+
+
+
+###############################################################################
+##                                                                           ##
+##  Main                                                                     ##
+##                                                                           ##
+###############################################################################
+
 
 # $matches is reset for each file. It starts as '', but if ever set, it is then
 # reset to '0', so that we might at the end distinguish '' (no match occured)
 # from '0' (match occured, but not in last file) when deciding the program exit
 # code. /zrajm [2008-02-03]
 
-# main loop
 my $began_at = time();
 my ($matches, $files, $infile) = ('', scalar(@ARGV), '');
-my $bytes_read = 0;
 my @prev_time;
 FILE: foreach $infile (@ARGV) {                 # for each input file
-
-    # display progress on STDERR (`--progress')
-    if ($progress) {                            #   if progress bar is enabled
-	$SIG{ALRM} = sub {                      #     
-	    my $part =                          #     float: 0..1 (start..end)
-		($bytes_read + $log->position()) / $total_size;
-	    my $percent =                       #     pretty-print percent
-		sprintf('%5.2f%% ', $part*100); #
-	    my $elapsed = time() - $began_at;   #     seconds since start
-	    my $time = $part ?                  #     total time (approx)
-		($elapsed / $part) : 0;         #
-	    $time  = estimate(@prev_time, $time, 10);#do mean of last times
-	    $time -= $elapsed;                  #     subtract elapsed time
-	    $time  = sprintf(" Left %02u:%02u", #     prety-print string
-	        int($time/60), $time%60);       #
-	    my $padding = length($percent.$time) + 3;
-	    my $length  = int( $part * ($term_width-$padding) + .5);
-	    my $blank   = " " x (($term_width-$padding)-$length);
-	    (my $bar    = "=" x $length) =~ s/=$/>/;
-	    my $msg = " ${percent}[".($bar).($blank)."]$time";
-	    print STDERR "$msg\e[K\r";          #
-	    $on_screen = TRUE;                  #
-	    alarm(.1);                          #
-	};                                      #
-	alarm(.1);                              #     each 10th of a second
-    }                                           #
-
-    # process one file
+    # open kredlog file
     my $prefix = ($with_filename && $infile) ? "$infile:" : "";
     defined($log->open($infile)) or do {        #   open file
-	warn "Cannot open file `$infile': $!\n";
-	next FILE;
-    };
+	warn "Cannot open file `$infile': $!\n";#
+	next FILE;                              #
+    };                                          #
+    # process file
     while (($_, my $epoch) = $log->read()) {    #   for each entry
 	next if defined $start_time and $epoch < $start_time;
 	next if defined $end_time   and $epoch > $end_time;
@@ -668,18 +642,18 @@ FILE: foreach $infile (@ARGV) {                 # for each input file
 	if (@color and not $invert_match) {     #     `--color'
 	    s/($regex)/colored($1, @color)/e;   #
 	}                                       #
-	results($on_screen, $prefix . $_);      #
+	Term::ProgressMeter::hide;              #
+	print $prefix . $_;                     #
     }                                           #
-
-    # after processing a file
+    # after processing file
     if ($count) {                               #   `--count'
-	results($on_screen, $prefix . ($matches ? $matches : 0) . "\n");
+	Term::ProgressMeter::hide;              #
+	print $prefix . ($matches || 0) . "\n"; #
     }                                           #
     $files --;                                  #
-    $matches = 0 if $matches;                   #   reset after each file
+    $matches = 0 if $matches;                   #   reset maches for each file
     $bytes_read += $log->position();            #
 }                                               #
-print "\n";
 exit 1 if $matches eq '';                       #
 
 #[[eof]]

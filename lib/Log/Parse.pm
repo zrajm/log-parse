@@ -420,4 +420,4 @@ Attribution-Share Alike 3.0 license. See:
 
 =cut
 
-#[[eof]]
+#[eof]
