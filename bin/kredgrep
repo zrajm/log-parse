@@ -616,8 +616,8 @@ my @prev_time;
 FILE: foreach $infile (@ARGV) {                 # for each input file
     # open kredlog file
     my $prefix = ($with_filename && $infile) ? "$infile:" : "";
-    defined($log->open($infile)) or do {        #   open file
-	warn "Cannot open file `$infile': $!\n";#
+    $log->open($infile) or do {                 #   open file
+	warn "Can't open file `$infile': $!\n"; #
 	next FILE;                              #
     };                                          #
     # process file

@@ -1,0 +1,8 @@
+Session:
+
+
+ * För varje kommando:
+
+   * Fånga response
+   * 
+

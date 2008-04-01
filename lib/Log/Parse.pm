@@ -6,7 +6,7 @@ use warnings;
 use Carp;
 
 use vars qw($VERSION); # FIXME: why this line?
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 =head1 NAME
 
@@ -153,6 +153,12 @@ normal B<-w> warnings on improper numeric conversions.)
 
 =cut
 
+
+# Returns undef on failure, or the byte offset at which reading will start
+# (non-zero for a resumed read). "0 but true" is returned instead of plain "0"
+# -- this tests as true (since it is a string) but will evaluate to 0 in
+# mathematical expressions.
+
 sub open {
     my ($me, $file) = @_;
     defined($me->{_filehandle}) and $me->close();
@@ -167,7 +173,7 @@ sub open {
 	    $me->{_filehandle} = undef;
 	    return undef;
 	};
-	$me->_read_into_buffer();               # read 1st chunk into buffer
+	$me->_read_into_buffer() or return undef;               # read 1st chunk into buffer
 	if ($me->{position} > 0 and @{$me->{_buffer}} and
 	    $me->{_1st_entry}   eq  ${$me->{_buffer}}[0]) {
 	    # This is the same file as last time (i.e. the 1st entry
@@ -178,7 +184,7 @@ sub open {
 		croak "Failed to seek to byte $me->{position} in file " .
 		    "`$me->{filename}': $!";
 	    $me->{_buffer} = [];
-	    $me->_read_into_buffer();
+	    $me->_read_into_buffer() or return undef;
 	} else {
 	    $me->{_1st_entry} = ${$me->{_buffer}}[0];   # store 1st entry
 	    $me->{position}   = 0;
@@ -197,8 +203,8 @@ sub open {
 	    carp "Cannot do resumed read: Seek not possible on standard input";
 	    $me->{resume_dir} = '';
 	}
-	$me->_read_into_buffer();               # read 1st chunk into buffer
-	$me->{_1st_entry} = ${$me->{_buffer}}[0];   # store 1st entry
+	$me->_read_into_buffer() or return undef;# read 1st chunk into buffer
+	$me->{_1st_entry} = ${$me->{_buffer}}[0];# store 1st entry
 	$me->{position}   = 0;
     }
     unshift @{ $me->{_buffer} }, '';
@@ -227,18 +233,20 @@ sub read {
     shift @{ $me->{_buffer}  };                 # remove 1st entry in buffer
     return wantarray ? () : undef               #
 	if @{ $me->{_buffer} } == 0;            # empty buffer
-    $me->_read_into_buffer();
+    $me->_read_into_buffer() or return undef;   #
     $me->{position} += length(${ $me->{_buffer} }[0]);
-    return $me->apply;
+    return $me->apply;                          #
 }
 
 
+# Reads stuff into the internal Log::Parse buffer. Returns 1 on success, ''
+# otherwise.
 sub _read_into_buffer {
     my ($me) = @_;
     while (@{ $me->{_buffer} } <= 1) {          # while buffer is only one entry
 	my $length =                            #   read a chunk into $_
 	    sysread $me->{_filehandle}, $_, $me->{buffer_size};
-	!defined($length) and croak "Cannot read logfile `$me->{filename}': $!";
+	return '' unless defined $length;       #   READ ERROR
 	$length == 0 and last;                  #   eof: stop
 	$_ = pop(@{ $me->{_buffer} }) . $_      #   add old buffer content to $_
 	    if @{ $me->{_buffer} };             #   add old buffer content to $_
@@ -252,6 +260,7 @@ sub _read_into_buffer {
 	push @{ $me->{_buffer} },               #   put remaining $_ into buffer
 	    substr($_, $last);                  #     as well
     }                                           #
+    return 1;                                   #
 }                                               #
 
 
@@ -385,38 +394,36 @@ __END__
 
 =head1 SEE ALSO
 
-I found the following guide on how to make Perl modules very helpful
-when writing this:
-
-http://world.std.com/~swmcd/steven/perl/module_mechanics.html
-
-My tiny page of programs will probably contain this module (and do
-contain some other interesting tidbits and programs):
+My tiny page of programs will probably contain this module (and do contain some
+other interesting tidbits and programs):
 
 http://www.update.uu.se/~zrajm/programs/
+
+I found the following guide on how to make Perl modules very helpful when
+writing this:
+
+http://world.std.com/~swmcd/steven/perl/module_mechanics.html
 
 
 =head1 AUTHOR
 
-Zrajm, E<lt>log-parse-mail@klingonska.orgE<gt>. Suggestions are much
-welcome, and, as long as any changes are good and sound, and don't
-break backward compatibility, sending me modified sources is the
-quickest way to get your suggestions included. :) Don't forget to
-include tests, if you write new code! (Come to think of it, improved
-tests for my own code would also be greatly appreciated.)
+Zrajm, E<lt>log-parse-mail@klingonska.orgE<gt>. Suggestions are much welcome,
+and, as long as any changes are good and sound, and don't break backward
+compatibility, sending me modified sources is the quickest way to get your
+suggestions included. :) Don't forget to include tests, if you write new code!
+(Come to think of it, improved tests for my own code would also be greatly
+appreciated.)
 
-I'm pretty new to the object-oriented Perl game, as well as to unit
-testing, so suggestions for improvement in those two areas are
-especially welcome!
+I'm pretty new to the object-oriented Perl game, as well as to unit testing, so
+suggestions for improvement in those two areas are especially welcome!
 
 
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2008 by zrajm.
 
-This Perl module is published under a Creative Commons
-Attribution-Share Alike 3.0 license. See:
-[http://creativecommons.org/licenses/by-sa/3.0/]
+This Perl module is published under a Creative Commons Attribution-Share Alike
+3.0 license. See: [http://creativecommons.org/licenses/by-sa/3.0/]
 
 =cut
 

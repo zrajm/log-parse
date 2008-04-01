@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use strict;
-use Test::More tests => 112;
+use Test::More tests => 121;
 BEGIN { use_ok('Log::Parse') };
 
 #########################
@@ -50,6 +50,7 @@ my %opt;
 my $file  = '/tmp/test_logfile';
 my $dir;
 
+system "rm -fr $file";
 system "echo 1a >$file";
 system "echo 2b >>$file";
 
@@ -77,10 +78,31 @@ isnt     ( $obj->close(),                undef,        'close()');
 #    ok (!-f $file,  "  shan't exist: `".abbr($file)."'");
 #}
 
+msg "non-existant input file";
+system "rm $file";
+isa_ok   ( $obj = Log::Parse->new(),     'Log::Parse', 'new()');
+is       ( $obj->open($file),            undef, 'open() returns undef');
+is       ( $!,                           'No such file or directory', '$! properly set');
+
+msg "input file is a directory";
+system "mkdir $file";
+isa_ok   ( $obj = Log::Parse->new(),     'Log::Parse', 'new()');
+is       ( $obj->open($file),            undef, 'open() returns undef');
+is       ( $!,                           'Is a directory', '$! properly set');
+system "rm -fr $file";
+
+msg "read protected file";
+system "echo -n >$file";
+system "chmod 000 $file";
+isa_ok   ( $obj = Log::Parse->new(),     'Log::Parse', 'new()');
+is       ( $obj->open($file),            undef, 'open() returns undef');
+is       ( $!,                           'Permission denied', '$! properly set');
+system "rm -fr $file";
+
 msg "empty file";
 system "echo -n >$file";
 isa_ok   ( $obj = Log::Parse->new(),     'Log::Parse', 'new()');
-is       ( $obj->open($file),            '0 but true', 'open() - empty file');
+is       ( $obj->open($file),            '0 but true', 'open() returns "0 but true"');
 is       ( $obj->read(),                 undef,        'read()');
 is       ( $obj->read(),                 undef,        'read()');
 isnt     ( $obj->close(),                undef,        'close()');

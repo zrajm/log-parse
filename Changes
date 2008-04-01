@@ -38,4 +38,14 @@ Revision history for Perl extension Log::Parse.
         - Makefile.PL: now also installs executable files found in `bin/' on
           `make install'
 
-[[eof]]
+0.06  Sun Mar 30 21:07:09 CEST 2008
+        - Log/Parse.pm: open() behaves more gracefully on error (returns undef
+          and sets $! properly); internal _read_into_buffer() also modified to
+          accomplish this
+	- bin/kredgrep, bin/kredplot, bin/kredresponses: removed error checking
+          now implemented into Log/Parse.pm
+	- t/Log-Parse.t: added tests for above fact
+        - README: removed badly updated version number
+        - bin/kredresponses: added new tool to process kredlogs
+
+[eof]

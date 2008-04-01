@@ -1,0 +1,333 @@
+#!/usr/bin/perl -w
+#
+# kredresponses - list final responses to add_invoice and reserve_amount
+#
+# [2008-03-28 14:33-16:56] v0.1 -- created from kredplot
+#
+# [2008-03-30 19:28-21:55] v0.2 -- more general approach to main loop
+#
+# 2008-03-31 09:57:58
+
+
+
+use strict;
+use lib do {        # add script's directory to @INC
+    use File::Spec; # to prettify path
+    use Cwd;        # to follow symlinks in path
+    my ($vol, $dir) = File::Spec->splitpath(Cwd::abs_path($0));
+        $dir        = File::Spec->catdir(File::Spec->splitdir($dir));
+    File::Spec->catpath($vol, $dir, '');
+};  
+use Log::Parse;
+use Time::Local;
+use Term::ProgressMeter;
+
+
+
+###############################################################################
+##                                                                           ##
+##  Informational Functions                                                  ##
+##                                                                           ##
+###############################################################################
+
+
+sub TRUE()  {  1 }
+sub FALSE() { '' }
+
+
+sub badness {
+    my ($msg, $log) = @_;
+    print $msg;
+    print $log;
+}
+
+
+
+
+###############################################################################
+##                                                                           ##
+##  Data Storage Module                                                      ##
+##                                                                           ##
+###############################################################################
+
+
+{
+    package Storage;
+
+    sub new {
+	bless({}, shift);
+    }
+
+    sub value {
+	my ($self, $key, @value) = @_;
+	$self->{$key} = [ @value ] if @value;
+	return @value ? @{$self->{$key}} : ();
+    }
+
+    sub delete {
+	my ($self, $key) = @_;
+	delete $self->{$key} if exists $self->{$key};
+    }
+
+    sub rename {
+	my ($self, $key, $newkey) = @_;
+	$self->{$newkey} = delete $self->{$key} 
+	if exists $self->{$key};
+    }
+
+    1;
+}
+
+
+
+###############################################################################
+##                                                                           ##
+##  Functions                                                                ##
+##                                                                           ##
+###############################################################################
+
+
+sub reserve_amount_response {
+    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
+
+    print "=" x 80, "\n";
+    print "RESERVE_AMOUNT_RESPONSE:".join(":", @_);
+    print join(":", @_);
+}
+
+sub reserve_amount {
+    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
+    # epid
+    $obj->value($epid, $msg, $epoch, $eid, \&reserve_amount_response);
+
+    print "RESERVE_AMOUNT:".join(":", @_);
+    print join(":", @_);
+}
+
+sub activate_reservation_response {
+    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
+
+
+}
+
+sub activate_reservation {
+    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
+    # epid
+    $obj->value($epid, $msg, $epoch, $eid, \&activate_reservation_response);
+    print "ACTIVATE_RESERVATION:".join(":", @_);
+    print join(":", @_);
+}
+
+
+sub response {
+    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
+
+    my ($pmsg, $pepoch, $peid, $pcallback);
+
+    ($pmsg, $pepoch, $peid, $pcallback) = $obj->value($epid) and 
+	&$pcallback($pmsg.$msg, $pepoch, $peid);
+
+    $_[-1] = "<<$epid>>".$_[-1];
+    if ($pmsg) {
+	$_[-1] = $pmsg . $_[-1];
+    }
+
+#    pop; push @_, $pmsg.$
+
+    print "RESPONSE:".join(":", @_);
+}
+
+
+
+
+###############################################################################
+##                                                                           ##
+##  Initialization                                                           ##
+##                                                                           ##
+###############################################################################
+
+
+%SIG = (
+    __DIE__  => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+	exit 5;
+    },
+    __WARN__ => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+    },
+);
+
+our %month = (
+    Jan =>  0,  Feb =>  1,  Mar =>  2,  Apr =>  3,  May =>  4,  Jun =>  5,
+    Jul =>  6,  Aug =>  7,  Sep =>  8,  Oct =>  9,  Nov => 10,  Dec => 11,
+    );
+my $month_re = join('|', keys %month);
+my $log = Log::Parse->new(
+    entry_regex => qr/^(?:
+        ==\s+ (\d+)-($month_re)-(\d+) :: (\d+):(\d+):(\d+) \s+ |
+        (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-(\d+) \s+ (\d+):(\d+):(\d+) \s+
+    )/mox,
+    entry_callback => sub {
+	return do {
+	    # return seconds since epoch
+	    if (defined $_[0]) {
+		timelocal(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
+	    } elsif (defined $_[6]) {
+		timelocal(@_[11, 10, 9, 8], $_[7]-1, $_[6]);
+	    } else {
+		0;
+	    }
+	};
+    },
+);
+
+
+my $progress = FALSE; #TRUE;
+my ($total_size, $bytes_read) = (0, 0);         #
+if ($progress) {                                #
+    foreach my $infile (@ARGV) {                # calc total size of all files
+	$total_size += (stat $infile)[7];       #   to search
+    }                                           #
+    $total_size = 1 if $total_size == 0;        # not zero (used in division)
+    Term::ProgressMeter::set(                   # invoke Term::ProgressMeter
+        update_interval => .1,                  #   every tenth of a seconds
+        max_value       => \$total_size,        #   reference to maximum count
+        current_value   => sub {                #
+	    $bytes_read + $log->position();     #
+	},                                      #
+   );                                           #
+}
+
+
+
+###############################################################################
+##                                                                           ##
+##  Main                                                                     ##
+##                                                                           ##
+###############################################################################
+
+
+my %hash = ();
+
+my %waiting_for = ();
+
+
+my %input = ();
+my %await = ();
+
+sub RESERVE_AMOUNT                { 1 }
+sub RESERVE_AMOUNT_RESPONSE       { 2 }
+sub ACTIVATE_RESERVATION          { 3 }
+sub ACTIVATE_RESERVATION_RESPONSE { 4 }
+
+
+my %cmd = (
+    reserve_amount       => \&reserve_amount,      
+    activate_reservation => \&activate_reservation,
+    response             => \&response,
+);
+
+
+
+my $store = Storage->new();
+FILE: foreach my $infile (@ARGV) {              # for each input file
+    $infile =~ s/\/+$//;                        #   strip trailing slashes
+    $log->open($infile) or do {                 #   open file
+	warn "Can't open file `$infile': $!\n";
+	next FILE;
+    };
+    # process one file
+    while (($_, my $epoch) = $log->read()) {    #   for each entry
+	my ($eid, $cmd, $epid);
+	if (($eid, $cmd) = /\(eid=(\d+)\)\s*(\w+)/ and ($epid) = /\(<([\d.]+)>\)/) {
+
+	    print $epoch.":".$epid.":".$cmd."\n";
+	    {
+		local $_= $_;
+		s/(\n).*/$1/s;
+		print;
+	    }
+
+
+	    if (exists $cmd{$cmd}) {
+		&{$cmd{$cmd}}($store, $epoch, $epid, $eid, $_);
+	    }
+	}
+
+
+
+
+    }                                           #
+    $bytes_read += $log->position();            #
+}                                               #
+
+#[eof]
+
+__END__
+
+=pod
+	m/\breserve_amount\b *\(<(.*?)>\)/ and do {
+	    $input{$1} .= $_;
+	    $await{$1} = RESERVE_AMOUNT_RESPONSE;
+	};
+
+	if (m/\bactivate_reservation\b/) {
+
+
+	    if /(*\(<(.*?)>\):\s*\["[^"]*",\s*"[^"]*",\s*"(\d+)",/) {
+		$input{$2} .= $_;
+		my $epid  = $1;
+		my $resid = $2;
+		
+		
+		print "=" x 80, "\n";
+		print "GOOD:$resid\n";
+		print $input{$resid};
+
+
+		#$input{$epid} = "$_";
+		$await{$epid} = ACTIVATE_RESERVATION_RESPONSE;
+		#delete $await{$epid}
+
+	    } else {
+
+
+	    }
+
+
+	}
+
+
+	m/\bresponse\b *\(<(.*)>\)/ and do {
+	    $input{$1} .= $_;
+	    my $epid = $1;
+	    if (exists($await{$epid})) {
+		if ($await{$epid} = RESERVE_AMOUNT_RESPONSE) {
+		    if (m/\{response,\s*\["(\d+)"\]\}/) {
+			my $resid = $1;
+			delete $await{$epid};
+			$await{$resid} = ACTIVATE_RESERVATION;
+			$input{$resid} = delete $input{$epid};
+#			print "=" x 80, "\n";
+#			print "GOOD:$resid\n";
+#			print $input{$resid};
+		    } else {
+			# BAD reserve_amount response
+			print "=" x 80, "\n";
+			print "BAD\n";
+			print $input{$epid};
+			delete $await{$epid};
+			delete $input{$epid};
+		    }
+
+
+		}
+#		print $input{$epid};
+#		print;
+#		delete $input{$epid};
+	    }
+	};
+
+=cut

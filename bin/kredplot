@@ -99,7 +99,8 @@ my $progress = TRUE;
 my ($total_size, $bytes_read) = (0, 0);         #
 if ($progress) {                                #
     foreach my $infile (@ARGV) {                # calc total size of all files
-	$total_size += (stat $infile)[7];       #   to search
+	$total_size += (stat $infile)[7]        #   to search
+	    if -f $infile;                      #
     }                                           #
     $total_size = 1 if $total_size == 0;        # not zero (used in division)
     Term::ProgressMeter::set(                   # invoke Term::ProgressMeter
@@ -111,22 +112,27 @@ if ($progress) {                                #
    );                                           #
 }
 
-# main loop
+
+
+###############################################################################
+##                                                                           ##
+##  Main                                                                     ##
+##                                                                           ##
+###############################################################################
+
+
 FILE: foreach my $infile (@ARGV) {              # for each input file
     $infile =~ s/\/+$//;                        #   strip trailing slashes
-#    warn "$infile\n";
+    #warn "$infile\n";
     use Cwd 'abs_path';
     my ($machine) = abs_path($infile) =~ m#/logs.([a-z]+)/#;
     $machine = "unknown" unless defined($machine);
-    if (-d $infile) {
-	warn "cannot open `$infile' for reading: File is a directory\n";
-	next;
-    }
+    $log->open($infile) or do {                 #   open file
+	warn "Can't open file `$infile': $!\n"; #
+	next FILE;                              #
+    };                                          #
+
     # process one file
-    defined($log->open($infile)) or do {        #   open file
-	warn "Cannot open file `$infile': $!\n";
-	next FILE;
-    };
     while (($_, my $epoch) = $log->read()) {    #   for each entry
         print "$epoch $machine logevent 0 ?\n"; #
 	print "    BAD: $infile: $_" if $epoch == 0;
