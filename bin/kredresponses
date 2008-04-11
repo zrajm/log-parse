@@ -293,6 +293,13 @@ my %display = (
 );
 
 
+# check files given on command line
+unshift @ARGV, '-' if not -t STDIN;
+if (@ARGV == 0) {
+    die "No input files specified, and nothing to read on standard input\n"
+}
+
+
 $| = 1;
 my $store = Storage->new();
 my %cache = ();
