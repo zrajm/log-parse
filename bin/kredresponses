@@ -6,8 +6,9 @@
 #
 # [2008-03-30 19:28-21:55] v0.2 -- more general approach to main loop
 #
-# 2008-03-31 09:57:58
-
+# [2008-03-31 09:57-11:33] -- (?)
+#
+# [2008-04-11] v1.0a -- seems to be functional
 
 
 use strict;
@@ -31,9 +32,9 @@ use Term::ProgressMeter;
 ###############################################################################
 
 
-sub TRUE()  {  1 }
-sub FALSE() { '' }
-
+sub TRUE  {  1 }
+sub FALSE { '' }
+sub VERBOSE { '' }     # set to 1 for more output '' for less
 
 sub badness {
     my ($msg, $log) = @_;
@@ -58,10 +59,15 @@ sub badness {
 	bless({}, shift);
     }
 
-    sub value {
+    sub put {
 	my ($self, $key, @value) = @_;
-	$self->{$key} = [ @value ] if @value;
+	$self->{$key} = [ @value ];
 	return @value ? @{$self->{$key}} : ();
+    }
+
+    sub get {
+	my ($self, $key) = @_;
+	return exists $self->{$key} ? @{$self->{$key}} : ();
     }
 
     sub delete {
@@ -87,56 +93,120 @@ sub badness {
 ###############################################################################
 
 
-sub reserve_amount_response {
-    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
+sub output {
+    my ($epoch, $msg, @entry) = @_;
 
-    print "=" x 80, "\n";
-    print "RESERVE_AMOUNT_RESPONSE:".join(":", @_);
-    print join(":", @_);
+    
+
+    if (VERBOSE) {
+	print "=" x 80, "\n";
+	print "$epoch $msg\n";
+	print @entry;
+    } else {
+	(my $msg = $msg) =~ s/ +/_/g;
+	print "$epoch lax $msg 0 x\n";
+    }
 }
+
+
+# 1207863241 sutare vsz 311096 KiB
+
+sub add_invoice {
+    my ($obj, $epoch, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+	output($epoch, "ADD_INVOICE ERROR $errmsg", @entry);
+    } elsif (s/^ (\Q{response, ["\E) (\d+) (\Q"]} \E) $/$1$3/x) {
+	# OKAY entry -- store for judgement by "activate_invoice"
+	my $invoice_number = $2;
+	$obj->put($invoice_number, @entry);
+    } else {
+	# UNKNOWN entry
+	output($epoch, "ADD_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+    }
+}
+
+
+sub activate_invoice {
+    my ($obj, $epoch, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+	output($epoch, "ACTIVATE_INVOICE ERROR $errmsg", @entry);
+    } elsif (s#^ (\Q{response, ["https://www.kreditor.se/temp/\E) (\d+) (\Q.pdf"]}\E) \s*$#$1$3#x) {
+	# OKAY entry
+	my ($invoice_number)  = ($2);
+	my @add_invoice_entry = $obj->get($invoice_number);
+	if (@add_invoice_entry) {
+	    $obj->delete($invoice_number);
+	    output($epoch, "ACTIVATE_INVOICE OK", @add_invoice_entry, @entry);
+	} else {
+	    output($epoch, "ACTIVATE_INVOICE OK BUT NO MATCHING ADD_INVOICE", @entry);
+	}
+    } else {
+	# UNKNOWN entry
+	output($epoch, "ACTIVATE_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+    }
+}
+
 
 sub reserve_amount {
-    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
-    # epid
-    $obj->value($epid, $msg, $epoch, $eid, \&reserve_amount_response);
-
-    print "RESERVE_AMOUNT:".join(":", @_);
-    print join(":", @_);
+    my ($obj, $epoch, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+	output($epoch, "RESERVE_AMOUNT ERROR $errmsg", @entry);
+    } elsif (s/^ (\Q{response, ["\E) (\d+) (\Q"]} \E) $/$1$3/x) {
+	# OKAY entry -- store for later judgement by "activate_reservation"
+	my $reservation_number = $2;
+	$obj->put($reservation_number, @entry);
+    } else {
+	# UNKNOWN entry
+	output($epoch, "RESERVE_AMOUNT ERROR UNKNOWN RESPONSE $_", @entry);
+    }
 }
 
-sub activate_reservation_response {
-    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
-
-
-}
 
 sub activate_reservation {
-    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
-    # epid
-    $obj->value($epid, $msg, $epoch, $eid, \&activate_reservation_response);
-    print "ACTIVATE_RESERVATION:".join(":", @_);
-    print join(":", @_);
-}
-
-
-sub response {
-    my ($obj, $epoch, $epid, $eid, $msg) = @_; shift;
-
-    my ($pmsg, $pepoch, $peid, $pcallback);
-
-    ($pmsg, $pepoch, $peid, $pcallback) = $obj->value($epid) and 
-	&$pcallback($pmsg.$msg, $pepoch, $peid);
-
-    $_[-1] = "<<$epid>>".$_[-1];
-    if ($pmsg) {
-	$_[-1] = $pmsg . $_[-1];
+    my ($obj, $epoch, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+	output($epoch, "ACTIVATE_RESERVATION ERROR $errmsg", @entry);
+    } elsif (s/^(\Q{response, [{array, ["\E) ([a-z_]*) (\Q", "\E) (\d+) (\Q"]}]}\E)/$1$3$5/x) {
+	# OKAY entry
+	my ($type, $invoice_number) = ($2, $4);
+	$entry[0] =~ m/^\[ \s* "[^"]*", \s* "[^"]*", \s* "(\d+)"/xm;
+	my $reservation_id = $1;
+	my @reserve_amount_entry = $obj->get($reservation_id);
+	if (@reserve_amount_entry) {
+	    $obj->delete($reservation_id);
+	    # FIXME: re-add $type to output (is "ok" or "no_risk")
+	    #output($epoch, "ACTIVATE_RESERVATION OK $type", @reserve_amount_entry, @entry);
+	    output($epoch, "ACTIVATE_RESERVATION OK", @reserve_amount_entry, @entry);
+	} else {
+	    # FIXME: re-add $type to output (is "ok" or "no_risk")
+	    #output($epoch, "ACTIVATE_RESERVATION OK $type BUT NO MATCHING RESERVE_AMOUNT", @entry);
+	    output($epoch, "ACTIVATE_RESERVATION OK BUT NO MATCHING RESERVE_AMOUNT", @entry);
+	}
+    } else {
+	# UNKNOWN entry
+	output($epoch, "ACTIVATE_RESERVATION ERROR UNKNOWN RESPONSE $_", @entry);
     }
-
-#    pop; push @_, $pmsg.$
-
-    print "RESPONSE:".join(":", @_);
 }
-
 
 
 
@@ -209,29 +279,23 @@ if ($progress) {                                #
 ###############################################################################
 
 
-my %hash = ();
 
-my %waiting_for = ();
-
-
-my %input = ();
-my %await = ();
-
-sub RESERVE_AMOUNT                { 1 }
-sub RESERVE_AMOUNT_RESPONSE       { 2 }
-sub ACTIVATE_RESERVATION          { 3 }
-sub ACTIVATE_RESERVATION_RESPONSE { 4 }
-
-
-my %cmd = (
-    reserve_amount       => \&reserve_amount,      
+my %ignore = (
+    yes      => '',
+    stale_cr => '',
+    error    => '',
+);
+my %display = (
+    add_invoice          => \&add_invoice,
+    activate_invoice     => \&activate_invoice,
+    reserve_amount       => \&reserve_amount,
     activate_reservation => \&activate_reservation,
-    response             => \&response,
 );
 
 
-
+$| = 1;
 my $store = Storage->new();
+my %cache = ();
 FILE: foreach my $infile (@ARGV) {              # for each input file
     $infile =~ s/\/+$//;                        #   strip trailing slashes
     $log->open($infile) or do {                 #   open file
@@ -240,94 +304,34 @@ FILE: foreach my $infile (@ARGV) {              # for each input file
     };
     # process one file
     while (($_, my $epoch) = $log->read()) {    #   for each entry
-	my ($eid, $cmd, $epid);
-	if (($eid, $cmd) = /\(eid=(\d+)\)\s*(\w+)/ and ($epid) = /\(<([\d.]+)>\)/) {
 
-	    print $epoch.":".$epid.":".$cmd."\n";
-	    {
-		local $_= $_;
-		s/(\n).*/$1/s;
-		print;
-	    }
-
-
-	    if (exists $cmd{$cmd}) {
-		&{$cmd{$cmd}}($store, $epoch, $epid, $eid, $_);
-	    }
-	}
-
-
-
-
+	# extact command name & erlang pid
+	if (my ($cmd, $epid) = /\(eid=\d+\) ([a-z][0-9a-z_]*) \(<([0-9.]+)>\):/) {
+	    next if exists $ignore{$cmd};       #     skip non-"result" entries
+	    push @{$cache{$epid}}, [$cmd, $_];  #     add event for this EPID
+	    if ($cmd eq 'response') {           #     if a "response" entry
+		if (not exists $cache{$epid}) { #       ERROR
+		    warn "RESPONSE TO UNKNOWN COMMAND WITH PID <$epid>\n";
+		} else {                        #       OK
+		    my $cmd = $cache{$epid}[0][0]; #      get command name
+		    if (exists $display{$cmd}) {   #      interesting command
+			my @entry = map {       #           make list of entries
+			    ${$_}[1];           #             and call callback
+			} @{$cache{$epid}};     #             function with those
+			&{$display{$cmd}}($store, $epoch, @entry);
+		    }                           #
+		}                               #
+		delete $cache{$epid};           #
+	    }                                   #
+	}                                       #
     }                                           #
     $bytes_read += $log->position();            #
 }                                               #
 
+
+#print "=" x 80, "\n" for (1..5);
+#foreach (sort keys %cache) {
+#    print "$_ $cache{$_}\n";
+#}
+
 #[eof]
-
-__END__
-
-=pod
-	m/\breserve_amount\b *\(<(.*?)>\)/ and do {
-	    $input{$1} .= $_;
-	    $await{$1} = RESERVE_AMOUNT_RESPONSE;
-	};
-
-	if (m/\bactivate_reservation\b/) {
-
-
-	    if /(*\(<(.*?)>\):\s*\["[^"]*",\s*"[^"]*",\s*"(\d+)",/) {
-		$input{$2} .= $_;
-		my $epid  = $1;
-		my $resid = $2;
-		
-		
-		print "=" x 80, "\n";
-		print "GOOD:$resid\n";
-		print $input{$resid};
-
-
-		#$input{$epid} = "$_";
-		$await{$epid} = ACTIVATE_RESERVATION_RESPONSE;
-		#delete $await{$epid}
-
-	    } else {
-
-
-	    }
-
-
-	}
-
-
-	m/\bresponse\b *\(<(.*)>\)/ and do {
-	    $input{$1} .= $_;
-	    my $epid = $1;
-	    if (exists($await{$epid})) {
-		if ($await{$epid} = RESERVE_AMOUNT_RESPONSE) {
-		    if (m/\{response,\s*\["(\d+)"\]\}/) {
-			my $resid = $1;
-			delete $await{$epid};
-			$await{$resid} = ACTIVATE_RESERVATION;
-			$input{$resid} = delete $input{$epid};
-#			print "=" x 80, "\n";
-#			print "GOOD:$resid\n";
-#			print $input{$resid};
-		    } else {
-			# BAD reserve_amount response
-			print "=" x 80, "\n";
-			print "BAD\n";
-			print $input{$epid};
-			delete $await{$epid};
-			delete $input{$epid};
-		    }
-
-
-		}
-#		print $input{$epid};
-#		print;
-#		delete $input{$epid};
-	    }
-	};
-
-=cut
