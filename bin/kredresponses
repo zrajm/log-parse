@@ -13,7 +13,6 @@
 #
 # [2008-04-11] v1.0a -- seems to be functional
 
-#
 # TODO:
 #
 #   o If invoice is added, and then deleted/frozen, it should no
@@ -24,7 +23,7 @@
 #
 #   o Be smarter; lump a series of unsuccessful attempts which ends
 #     with a successful creation of invoice into one event.
-
+#
 
 use strict;
 use lib do {        # add script's directory to @INC
@@ -143,7 +142,7 @@ sub add_invoice {
 	# OKAY entry -- store for judgement by "activate_invoice"
 	my $invoice_number = $2;
 	$obj->put($invoice_number, @entry);
-	return ();
+	return ("ADD_INVOICE OK", @entry);
     } else {
 	# UNKNOWN entry
 	#return ("ADD_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
@@ -192,7 +191,7 @@ sub reserve_amount {
 	# OKAY entry -- store for later judgement by "activate_reservation"
 	my $reservation_number = $2;
 	$obj->put($reservation_number, @entry);
-	return ();
+	return ("RESERVE_AMOUNT OK", @entry);
     } else {
 	# UNKNOWN entry
 	#return ("RESERVE_AMOUNT ERROR UNKNOWN RESPONSE $_", @entry);
