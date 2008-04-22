@@ -2,6 +2,9 @@
 #
 # kredresponses - list final responses to add_invoice and reserve_amount
 #
+# Script for figuring out what happens, and how ppl fail/succeed in
+# creating invoices.
+#
 # [2008-03-28 14:33-16:56] v0.1 -- created from kredplot
 #
 # [2008-03-30 19:28-21:55] v0.2 -- more general approach to main loop
@@ -9,6 +12,18 @@
 # [2008-03-31 09:57-11:33] -- (?)
 #
 # [2008-04-11] v1.0a -- seems to be functional
+
+#
+# TODO:
+#
+#   o If invoice is added, and then deleted/frozen, it should no
+#     longer be considered for activation. (is this what
+#     "reject_invoice" and "delete_invoice" does?)
+#
+#   o Can a "reserve_amount" also be frozen? How do we handle this?
+#
+#   o Be smarter; lump a series of unsuccessful attempts which ends
+#     with a successful creation of invoice into one event.
 
 
 use strict;
