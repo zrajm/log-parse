@@ -93,99 +93,108 @@ sub badness {
 ###############################################################################
 
 
+# 1207863241 sutare vsz 311096 KiB
 sub output {
     my ($epoch, $msg, @entry) = @_;
-
-    
-
     if (VERBOSE) {
 	print "=" x 80, "\n";
 	print "$epoch $msg\n";
 	print @entry;
     } else {
-	(my $msg = $msg) =~ s/ +/_/g;
+	(my $msg = $msg) =~ s/[\/ ]+/_/g;
 	print "$epoch lax $msg 0 x\n";
     }
 }
 
 
-# 1207863241 sutare vsz 311096 KiB
-
 sub add_invoice {
-    my ($obj, $epoch, @entry) = @_;
+    my ($obj, @entry) = @_;
     $_ = $entry[-1];
     s/.*?\): +//;
     s/\s+/ /g;
-    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
 	# ERROR entry
 	my ($errnum, $errmsg) = ($1, $2);
-	output($epoch, "ADD_INVOICE ERROR $errmsg", @entry);
+
+
+	for ($errmsg) {
+	    s{Objektnr.*}{bad_objno};
+	    s{/+}{_};
+	    s{__+}{_};
+	}
+
+	return ("ADD_INVOICE ERROR $errmsg", @entry);
     } elsif (s/^ (\Q{response, ["\E) (\d+) (\Q"]} \E) $/$1$3/x) {
 	# OKAY entry -- store for judgement by "activate_invoice"
 	my $invoice_number = $2;
 	$obj->put($invoice_number, @entry);
+	return ();
     } else {
 	# UNKNOWN entry
-	output($epoch, "ADD_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+	#return ("ADD_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("ADD_INVOICE ERROR UNKNOWN RESPONSE", @entry);
     }
 }
 
 
 sub activate_invoice {
-    my ($obj, $epoch, @entry) = @_;
+    my ($obj, @entry) = @_;
     $_ = $entry[-1];
     s/.*?\): +//;
     s/\s+/ /g;
-    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
 	# ERROR entry
 	my ($errnum, $errmsg) = ($1, $2);
-	output($epoch, "ACTIVATE_INVOICE ERROR $errmsg", @entry);
+	return ("ACTIVATE_INVOICE ERROR $errmsg", @entry);
     } elsif (s#^ (\Q{response, ["https://www.kreditor.se/temp/\E) (\d+) (\Q.pdf"]}\E) \s*$#$1$3#x) {
 	# OKAY entry
 	my ($invoice_number)  = ($2);
 	my @add_invoice_entry = $obj->get($invoice_number);
 	if (@add_invoice_entry) {
 	    $obj->delete($invoice_number);
-	    output($epoch, "ACTIVATE_INVOICE OK", @add_invoice_entry, @entry);
+	    return ("ACTIVATE_INVOICE OK", @add_invoice_entry, @entry);
 	} else {
-	    output($epoch, "ACTIVATE_INVOICE OK BUT NO MATCHING ADD_INVOICE", @entry);
+	    return ("ACTIVATE_INVOICE OK BUT NO MATCHING ADD_INVOICE", @entry);
 	}
     } else {
 	# UNKNOWN entry
-	output($epoch, "ACTIVATE_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+	#return ("ACTIVATE_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("ACTIVATE_INVOICE ERROR UNKNOWN RESPONSE", @entry);
     }
 }
 
 
 sub reserve_amount {
-    my ($obj, $epoch, @entry) = @_;
+    my ($obj, @entry) = @_;
     $_ = $entry[-1];
     s/.*?\): +//;
     s/\s+/ /g;
-    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
 	# ERROR entry
 	my ($errnum, $errmsg) = ($1, $2);
-	output($epoch, "RESERVE_AMOUNT ERROR $errmsg", @entry);
+	return ("RESERVE_AMOUNT ERROR $errmsg", @entry);
     } elsif (s/^ (\Q{response, ["\E) (\d+) (\Q"]} \E) $/$1$3/x) {
 	# OKAY entry -- store for later judgement by "activate_reservation"
 	my $reservation_number = $2;
 	$obj->put($reservation_number, @entry);
+	return ();
     } else {
 	# UNKNOWN entry
-	output($epoch, "RESERVE_AMOUNT ERROR UNKNOWN RESPONSE $_", @entry);
+	#return ("RESERVE_AMOUNT ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("RESERVE_AMOUNT ERROR UNKNOWN RESPONSE", @entry);
     }
 }
 
 
 sub activate_reservation {
-    my ($obj, $epoch, @entry) = @_;
+    my ($obj, @entry) = @_;
     $_ = $entry[-1];
     s/.*?\): +//;
     s/\s+/ /g;
-    if (/^\Q{response, {fault, \E(-?\d+).*?"([^"]+)"/x) {
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
 	# ERROR entry
 	my ($errnum, $errmsg) = ($1, $2);
-	output($epoch, "ACTIVATE_RESERVATION ERROR $errmsg", @entry);
+	return ("ACTIVATE_RESERVATION ERROR $errmsg", @entry);
     } elsif (s/^(\Q{response, [{array, ["\E) ([a-z_]*) (\Q", "\E) (\d+) (\Q"]}]}\E)/$1$3$5/x) {
 	# OKAY entry
 	my ($type, $invoice_number) = ($2, $4);
@@ -195,16 +204,17 @@ sub activate_reservation {
 	if (@reserve_amount_entry) {
 	    $obj->delete($reservation_id);
 	    # FIXME: re-add $type to output (is "ok" or "no_risk")
-	    #output($epoch, "ACTIVATE_RESERVATION OK $type", @reserve_amount_entry, @entry);
-	    output($epoch, "ACTIVATE_RESERVATION OK", @reserve_amount_entry, @entry);
+	    #return ("ACTIVATE_RESERVATION OK $type", @reserve_amount_entry, @entry);
+	    return ("ACTIVATE_RESERVATION OK", @reserve_amount_entry, @entry);
 	} else {
 	    # FIXME: re-add $type to output (is "ok" or "no_risk")
-	    #output($epoch, "ACTIVATE_RESERVATION OK $type BUT NO MATCHING RESERVE_AMOUNT", @entry);
-	    output($epoch, "ACTIVATE_RESERVATION OK BUT NO MATCHING RESERVE_AMOUNT", @entry);
+	    #return ("ACTIVATE_RESERVATION OK $type BUT NO MATCHING RESERVE_AMOUNT", @entry);
+	    return ("ACTIVATE_RESERVATION OK BUT NO MATCHING RESERVE_AMOUNT", @entry);
 	}
     } else {
 	# UNKNOWN entry
-	output($epoch, "ACTIVATE_RESERVATION ERROR UNKNOWN RESPONSE $_", @entry);
+	#return ("ACTIVATE_RESERVATION ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("ACTIVATE_RESERVATION ERROR UNKNOWN RESPONSE", @entry);
     }
 }
 
@@ -321,11 +331,14 @@ FILE: foreach my $infile (@ARGV) {              # for each input file
 		    warn "RESPONSE TO UNKNOWN COMMAND WITH PID <$epid>\n";
 		} else {                        #       OK
 		    my $cmd = $cache{$epid}[0][0]; #      get command name
-		    if (exists $display{$cmd}) {   #      interesting command
+		    if (exists $display{$cmd}) {#         interesting command
 			my @entry = map {       #           make list of entries
 			    ${$_}[1];           #             and call callback
 			} @{$cache{$epid}};     #             function with those
-			&{$display{$cmd}}($store, $epoch, @entry);
+			my @retvalue =          #
+			    &{$display{$cmd}}($store, @entry);
+			output ($epoch, @retvalue)
+			    if @retvalue;       #
 		    }                           #
 		}                               #
 		delete $cache{$epid};           #
