@@ -5,7 +5,7 @@
 # Script for figuring out what happens, and how ppl fail/succeed in
 # creating invoices.
 #
-# [2008-03-28 14:33-16:56] v0.1 -- created from kredplot
+# [2008-03-28 14:33-16:56] v0.1 -- created from kredlog2opstat
 #
 # [2008-03-30 19:28-21:55] v0.2 -- more general approach to main loop
 #

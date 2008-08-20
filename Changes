@@ -42,8 +42,8 @@ Revision history for Perl extension Log::Parse.
         - Log/Parse.pm: open() behaves more gracefully on error (returns undef
           and sets $! properly); internal _read_into_buffer() also modified to
           accomplish this
-	- bin/kredgrep, bin/kredplot, bin/kredresponses: removed error checking
-          now implemented into Log/Parse.pm
+	- bin/kredgrep, bin/kredlog2opstat, bin/kredresponses: removed
+          error checking now implemented into Log/Parse.pm
 	- t/Log-Parse.t: added tests for above fact
         - README: removed badly updated version number
         - bin/kredresponses: added new tool to process kredlogs

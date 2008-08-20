@@ -9,7 +9,7 @@ TODO
 bin/kred2hashed
 bin/kredconvert
 bin/kredgrep
-bin/kredplot
+bin/kredlog2opstat
 bin/kredresponses
 bin/kredsort_FIXME
 META.yml                                 Module meta-data (added by MakeMaker)
