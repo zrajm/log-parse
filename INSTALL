@@ -1,3 +1,6 @@
+
+For installation instructions, see "README".
+
 CAVEATS
 
   * `bin/kredgrep' requires `Term::ReadKey' and `Term::ANSIColor'
