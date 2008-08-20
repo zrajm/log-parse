@@ -1,0 +1,9 @@
+The latest version of Log::Parse may be obtained using git, e.g.:
+
+    git clone http://www.update.uu.se/~zrajm/programs/repo/log-parse.git
+
+or (if you know my password) ;)
+
+    git clone psilocybe.update.uu.se:~/public_html/programs/repo/log-parse.git
+
+[eof]
