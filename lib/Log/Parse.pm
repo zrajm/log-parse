@@ -47,11 +47,11 @@ It has a couple of benefits over other log parsers.
 
 =over 4
 
-=item Support for multiple line log entries.
+=item * Support for multi-line log entries.
 
-=item Automatic extraction/processing of time (or other) info.
+=item * Automatic extraction/processing of time (or other) info.
 
-=item Incremental reading mode (for "tail -f"-similar operation).
+=item * Incremental reading mode (for "tail -f"-similar operation).
 
 =back
 

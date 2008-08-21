@@ -1,12 +1,16 @@
 #!/usr/bin/perl -w
-#
+
 # kredlog2opstat - generate simple opstat log from kredlogs
-#
+
 # [2008-03-19, 10:16-10:35] v0.1 - created from kredgrep
-#
+
+# [2008-08-20, 20:14-20:21] v0.2 - now writes size (in bytes) of each
+# log entry into log, as well as name the log entry name after the
+# logfile.
+
 # This very simplistic script is just indended to be used for testing
 # my extracted kredlogs for gaps.
-#
+
 # It extracts the event times from a kredlog and generarates an opstat
 # log (with time in epoch seconds) which should be useful for doing
 # some frequency plotting of events in the kredlog.
@@ -132,9 +136,14 @@ FILE: foreach my $infile (@ARGV) {              # for each input file
 	next FILE;                              #
     };                                          #
 
+    # name of this file's log event
+    my $logevent_name = $infile;                #
+    $logevent_name =~ s[.*/(.*).log][$1];       #
+    $logevent_name =~ tr/ /_/;                  #
+
     # process one file
     while (($_, my $epoch) = $log->read()) {    #   for each entry
-        print "$epoch $machine logevent 0 ?\n"; #
+        print "$epoch $machine $logevent_name ".length($_)." bytes\n"; #
 	print "    BAD: $infile: $_" if $epoch == 0;
     }                                           #
 
