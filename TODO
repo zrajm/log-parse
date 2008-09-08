@@ -1,5 +1,17 @@
 TODO:
 
+  * BUGFIX:
+
+        kredgrep -P -H store_show <2007->-*/audit.log |kredgrep -p 'eid[^0-9]*\b326\b'
+
+    gives
+
+        kredgrep: Use of uninitialized value in addition (+) at /usr/local/bin/kredgrep line 581.
+        kredgrep: Can't open file `-': Interrupted system call
+
+    Maybe kredgrep's stdout is closed between reading files, given broken input
+    to 2nd invocation? Anyways. Needs to be fixed.
+
   * `bin/kredconvert' results in spurious `Use of uninitialized value in print
     at /usr/local/share/perl/5.8.8/Log/Parse.pm line 279.' messages. It is
     apparently _save_scalar() that is sometimes fed undef instead of real data.
