@@ -1,0 +1,153 @@
+#!/usr/bin/perl -w
+
+# kredlog2opstat - generate simple opstat log from kredlogs
+
+# [2008-03-19, 10:16-10:35] v0.1 - created from kredgrep
+
+# [2008-08-20, 20:14-20:21] v0.2 - now writes size (in bytes) of each
+# log entry into log, as well as name the log entry name after the
+# logfile.
+
+# This very simplistic script is just indended to be used for testing
+# my extracted kredlogs for gaps.
+
+# It extracts the event times from a kredlog and generarates an opstat
+# log (with time in epoch seconds) which should be useful for doing
+# some frequency plotting of events in the kredlog.
+
+use strict;
+use lib do {        # add script's directory to @INC
+    use File::Spec; # to prettify path
+    use Cwd;        # to follow symlinks in path
+    my ($vol, $dir) = File::Spec->splitpath(Cwd::abs_path($0));
+        $dir        = File::Spec->catdir(File::Spec->splitdir($dir));
+    File::Spec->catpath($vol, $dir, '');
+};  
+use Log::Parse;
+use Time::Local;
+use Term::ProgressMeter;
+
+
+
+###############################################################################
+##                                                                           ##
+##  Informational Functions                                                  ##
+##                                                                           ##
+###############################################################################
+
+
+sub TRUE()  {  1 }
+sub FALSE() { '' }
+
+
+
+###############################################################################
+##                                                                           ##
+##  Initialization                                                           ##
+##                                                                           ##
+###############################################################################
+
+
+%SIG = (
+    __DIE__  => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+	exit 5;
+    },
+    __WARN__ => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+    },
+);
+
+
+
+############
+##  Main  ##
+############
+
+
+# Regex matching the following headers:
+#     == 7-Nov-2007::20:31:07 == [...]
+#     kred@lax      2007-02-13 23:15:05 [...]
+#     kred@lax      2005-05-24 02:30:0  [...]
+#       (digits for seconds may be one digit only in older logs! -- weirdly enough!)
+
+our %month = (
+    Jan =>  0,  Feb =>  1,  Mar =>  2,  Apr =>  3,
+    May =>  4,  Jun =>  5,  Jul =>  6,  Aug =>  7,
+    Sep =>  8,  Oct =>  9,  Nov => 10,  Dec => 11,
+    );
+my $month_re = join('|', keys %month);
+my $log = Log::Parse->new(
+    entry_regex => qr/^(?:
+        ==\s+ (\d+)-($month_re)-(\d+) :: (\d+):(\d+):(\d+) \s+ |
+        (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-(\d+) \s+ (\d+):(\d+):(\d+) \s+
+    )/mox,
+    entry_callback => sub {
+	return do {
+	    # return seconds since epoch
+	    if (defined $_[0]) {
+		timelocal(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
+	    } elsif (defined $_[6]) {
+		timelocal(@_[11, 10, 9, 8], $_[7]-1, $_[6]);
+	    } else {
+		0;
+	    }
+	};
+    },
+);
+
+
+my $progress = TRUE;
+my ($total_size, $bytes_read) = (0, 0);         #
+if ($progress) {                                #
+    foreach my $infile (@ARGV) {                # calc total size of all files
+	$total_size += (stat $infile)[7]        #   to search
+	    if -f $infile;                      #
+    }                                           #
+    $total_size = 1 if $total_size == 0;        # not zero (used in division)
+    Term::ProgressMeter::set(                   # invoke Term::ProgressMeter
+        update_interval => .1,                  #   every tenth of a seconds
+        max_value       => \$total_size,        #   reference to maximum count
+        current_value   => sub {                #
+	    $bytes_read + $log->position();     #
+	},                                      #
+   );                                           #
+}
+
+
+
+###############################################################################
+##                                                                           ##
+##  Main                                                                     ##
+##                                                                           ##
+###############################################################################
+
+
+FILE: foreach my $infile (@ARGV) {              # for each input file
+    $infile =~ s/\/+$//;                        #   strip trailing slashes
+    #warn "$infile\n";
+    use Cwd 'abs_path';
+    my ($machine) = abs_path($infile) =~ m#/logs.([a-z]+)/#;
+    $machine = "unknown" unless defined($machine);
+    $log->open($infile) or do {                 #   open file
+	warn "Can't open file `$infile': $!\n"; #
+	next FILE;                              #
+    };                                          #
+
+    # name of this file's log event
+    my $logevent_name = $infile;                #
+    $logevent_name =~ s[.*/(.*).log][$1];       #
+    $logevent_name =~ tr/ /_/;                  #
+
+    # process one file
+    while (($_, my $epoch) = $log->read()) {    #   for each entry
+        print "$epoch $machine $logevent_name ".length($_)." bytes\n"; #
+	print "    BAD: $infile: $_" if $epoch == 0;
+    }                                           #
+
+    $bytes_read += $log->position();            #
+}                                               #
+
+#[[eof]]

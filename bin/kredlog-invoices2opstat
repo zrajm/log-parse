@@ -1,0 +1,371 @@
+#!/usr/bin/perl -w
+#
+# kredresponses - list final responses to add_invoice and reserve_amount
+#
+# Script for figuring out what happens, and how ppl fail/succeed in
+# creating invoices.
+#
+# [2008-03-28 14:33-16:56] v0.1 -- created from kredlog2opstat
+#
+# [2008-03-30 19:28-21:55] v0.2 -- more general approach to main loop
+#
+# [2008-03-31 09:57-11:33] -- (?)
+#
+# [2008-04-11] v1.0a -- seems to be functional
+
+# TODO:
+#
+#   o If invoice is added, and then deleted/frozen, it should no
+#     longer be considered for activation. (is this what
+#     "reject_invoice" and "delete_invoice" does?)
+#
+#   o Can a "reserve_amount" also be frozen? How do we handle this?
+#
+#   o Be smarter; lump a series of unsuccessful attempts which ends
+#     with a successful creation of invoice into one event.
+#
+
+use strict;
+use lib do {        # add script's directory to @INC
+    use File::Spec; # to prettify path
+    use Cwd;        # to follow symlinks in path
+    my ($vol, $dir) = File::Spec->splitpath(Cwd::abs_path($0));
+        $dir        = File::Spec->catdir(File::Spec->splitdir($dir));
+    File::Spec->catpath($vol, $dir, '');
+};  
+use Log::Parse;
+use Time::Local;
+use Term::ProgressMeter;
+
+
+
+###############################################################################
+##                                                                           ##
+##  Informational Functions                                                  ##
+##                                                                           ##
+###############################################################################
+
+
+sub TRUE  {  1 }
+sub FALSE { '' }
+sub VERBOSE { '' }     # set to 1 for more output '' for less
+
+sub badness {
+    my ($msg, $log) = @_;
+    print $msg;
+    print $log;
+}
+
+
+
+
+###############################################################################
+##                                                                           ##
+##  Data Storage Module                                                      ##
+##                                                                           ##
+###############################################################################
+
+
+{
+    package Storage;
+
+    sub new {
+	bless({}, shift);
+    }
+
+    sub put {
+	my ($self, $key, @value) = @_;
+	$self->{$key} = [ @value ];
+	return @value ? @{$self->{$key}} : ();
+    }
+
+    sub get {
+	my ($self, $key) = @_;
+	return exists $self->{$key} ? @{$self->{$key}} : ();
+    }
+
+    sub delete {
+	my ($self, $key) = @_;
+	delete $self->{$key} if exists $self->{$key};
+    }
+
+    sub rename {
+	my ($self, $key, $newkey) = @_;
+	$self->{$newkey} = delete $self->{$key} 
+	if exists $self->{$key};
+    }
+
+    1;
+}
+
+
+
+###############################################################################
+##                                                                           ##
+##  Functions                                                                ##
+##                                                                           ##
+###############################################################################
+
+
+# 1207863241 sutare vsz 311096 KiB
+sub output {
+    my ($epoch, $msg, @entry) = @_;
+    if (VERBOSE) {
+	print "=" x 80, "\n";
+	print "$epoch $msg\n";
+	print @entry;
+    } else {
+	(my $msg = $msg) =~ s/[\/ ]+/_/g;
+	print "$epoch lax $msg 0 x\n";
+    }
+}
+
+
+sub add_invoice {
+    my ($obj, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+
+
+	for ($errmsg) {
+	    s{Objektnr.*}{bad_objno};
+	    s{/+}{_};
+	    s{__+}{_};
+	}
+
+	return ("ADD_INVOICE ERROR $errmsg", @entry);
+    } elsif (s/^ (\Q{response, ["\E) (\d+) (\Q"]} \E) $/$1$3/x) {
+	# OKAY entry -- store for judgement by "activate_invoice"
+	my $invoice_number = $2;
+	$obj->put($invoice_number, @entry);
+	return ("ADD_INVOICE OK", @entry);
+    } else {
+	# UNKNOWN entry
+	#return ("ADD_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("ADD_INVOICE ERROR UNKNOWN RESPONSE", @entry);
+    }
+}
+
+
+sub activate_invoice {
+    my ($obj, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+	return ("ACTIVATE_INVOICE ERROR $errmsg", @entry);
+    } elsif (s#^ (\Q{response, ["https://www.kreditor.se/temp/\E) (\d+) (\Q.pdf"]}\E) \s*$#$1$3#x) {
+	# OKAY entry
+	my ($invoice_number)  = ($2);
+	my @add_invoice_entry = $obj->get($invoice_number);
+	if (@add_invoice_entry) {
+	    $obj->delete($invoice_number);
+	    return ("ACTIVATE_INVOICE OK", @add_invoice_entry, @entry);
+	} else {
+	    return ("ACTIVATE_INVOICE OK BUT NO MATCHING ADD_INVOICE", @entry);
+	}
+    } else {
+	# UNKNOWN entry
+	#return ("ACTIVATE_INVOICE ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("ACTIVATE_INVOICE ERROR UNKNOWN RESPONSE", @entry);
+    }
+}
+
+
+sub reserve_amount {
+    my ($obj, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+	return ("RESERVE_AMOUNT ERROR $errmsg", @entry);
+    } elsif (s/^ (\Q{response, ["\E) (\d+) (\Q"]} \E) $/$1$3/x) {
+	# OKAY entry -- store for later judgement by "activate_reservation"
+	my $reservation_number = $2;
+	$obj->put($reservation_number, @entry);
+	return ("RESERVE_AMOUNT OK", @entry);
+    } else {
+	# UNKNOWN entry
+	#return ("RESERVE_AMOUNT ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("RESERVE_AMOUNT ERROR UNKNOWN RESPONSE", @entry);
+    }
+}
+
+
+sub activate_reservation {
+    my ($obj, @entry) = @_;
+    $_ = $entry[-1];
+    s/.*?\): +//;
+    s/\s+/ /g;
+    if (m/^ \Q{response, {fault, \E (-?\d+) .*? "([^"]+)" /x) { #'"
+	# ERROR entry
+	my ($errnum, $errmsg) = ($1, $2);
+	return ("ACTIVATE_RESERVATION ERROR $errmsg", @entry);
+    } elsif (s/^(\Q{response, [{array, ["\E) ([a-z_]*) (\Q", "\E) (\d+) (\Q"]}]}\E)/$1$3$5/x) {
+	# OKAY entry
+	my ($type, $invoice_number) = ($2, $4);
+	$entry[0] =~ m/^\[ \s* "[^"]*", \s* "[^"]*", \s* "(\d+)"/xm;
+	my $reservation_id = $1;
+	my @reserve_amount_entry = $obj->get($reservation_id);
+	if (@reserve_amount_entry) {
+	    $obj->delete($reservation_id);
+	    # FIXME: re-add $type to output (is "ok" or "no_risk")
+	    #return ("ACTIVATE_RESERVATION OK $type", @reserve_amount_entry, @entry);
+	    return ("ACTIVATE_RESERVATION OK", @reserve_amount_entry, @entry);
+	} else {
+	    # FIXME: re-add $type to output (is "ok" or "no_risk")
+	    #return ("ACTIVATE_RESERVATION OK $type BUT NO MATCHING RESERVE_AMOUNT", @entry);
+	    return ("ACTIVATE_RESERVATION OK BUT NO MATCHING RESERVE_AMOUNT", @entry);
+	}
+    } else {
+	# UNKNOWN entry
+	#return ("ACTIVATE_RESERVATION ERROR UNKNOWN RESPONSE $_", @entry);
+	return ("ACTIVATE_RESERVATION ERROR UNKNOWN RESPONSE", @entry);
+    }
+}
+
+
+
+###############################################################################
+##                                                                           ##
+##  Initialization                                                           ##
+##                                                                           ##
+###############################################################################
+
+
+%SIG = (
+    __DIE__  => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+	exit 5;
+    },
+    __WARN__ => sub {
+	(my $mybin = $0) =~ s{^.*/}{};
+	warn "$mybin: $_[0]";
+    },
+);
+
+our %month = (
+    Jan =>  0,  Feb =>  1,  Mar =>  2,  Apr =>  3,  May =>  4,  Jun =>  5,
+    Jul =>  6,  Aug =>  7,  Sep =>  8,  Oct =>  9,  Nov => 10,  Dec => 11,
+    );
+my $month_re = join('|', keys %month);
+my $log = Log::Parse->new(
+    entry_regex => qr/^(?:
+        ==\s+ (\d+)-($month_re)-(\d+) :: (\d+):(\d+):(\d+) \s+ |
+        (?:\w+\s+)? \w+@\w+ \s+ (\d+)-(\d+)-(\d+) \s+ (\d+):(\d+):(\d+) \s+
+    )/mox,
+    entry_callback => sub {
+	return do {
+	    # return seconds since epoch
+	    if (defined $_[0]) {
+		timelocal(@_[5, 4, 3, 0], $month{$_[1]}, $_[2]);
+	    } elsif (defined $_[6]) {
+		timelocal(@_[11, 10, 9, 8], $_[7]-1, $_[6]);
+	    } else {
+		0;
+	    }
+	};
+    },
+);
+
+
+my $progress = FALSE; #TRUE;
+my ($total_size, $bytes_read) = (0, 0);         #
+if ($progress) {                                #
+    foreach my $infile (@ARGV) {                # calc total size of all files
+	$total_size += (stat $infile)[7];       #   to search
+    }                                           #
+    $total_size = 1 if $total_size == 0;        # not zero (used in division)
+    Term::ProgressMeter::set(                   # invoke Term::ProgressMeter
+        update_interval => .1,                  #   every tenth of a seconds
+        max_value       => \$total_size,        #   reference to maximum count
+        current_value   => sub {                #
+	    $bytes_read + $log->position();     #
+	},                                      #
+   );                                           #
+}
+
+
+
+###############################################################################
+##                                                                           ##
+##  Main                                                                     ##
+##                                                                           ##
+###############################################################################
+
+
+
+my %ignore = (
+    yes      => '',
+    stale_cr => '',
+    error    => '',
+);
+my %display = (
+    add_invoice          => \&add_invoice,
+    activate_invoice     => \&activate_invoice,
+    reserve_amount       => \&reserve_amount,
+    activate_reservation => \&activate_reservation,
+);
+
+
+# check files given on command line
+unshift @ARGV, '-' if not -t STDIN;
+if (@ARGV == 0) {
+    die "No input files specified, and nothing to read on standard input\n"
+}
+
+
+$| = 1;
+my $store = Storage->new();
+my %cache = ();
+FILE: foreach my $infile (@ARGV) {              # for each input file
+    $infile =~ s/\/+$//;                        #   strip trailing slashes
+    $log->open($infile) or do {                 #   open file
+	warn "Can't open file `$infile': $!\n";
+	next FILE;
+    };
+    # process one file
+    while (($_, my $epoch) = $log->read()) {    #   for each entry
+
+	# extact command name & erlang pid
+	if (my ($cmd, $epid) = /\(eid=\d+\) ([a-z][0-9a-z_]*) \(<([0-9.]+)>\):/) {
+	    next if exists $ignore{$cmd};       #     skip non-"result" entries
+	    push @{$cache{$epid}}, [$cmd, $_];  #     add event for this EPID
+	    if ($cmd eq 'response') {           #     if a "response" entry
+		if (not exists $cache{$epid}) { #       ERROR
+		    warn "RESPONSE TO UNKNOWN COMMAND WITH PID <$epid>\n";
+		} else {                        #       OK
+		    my $cmd = $cache{$epid}[0][0]; #      get command name
+		    if (exists $display{$cmd}) {#         interesting command
+			my @entry = map {       #           make list of entries
+			    ${$_}[1];           #             and call callback
+			} @{$cache{$epid}};     #             function with those
+			my @retvalue =          #
+			    &{$display{$cmd}}($store, @entry);
+			output ($epoch, @retvalue)
+			    if @retvalue;       #
+		    }                           #
+		}                               #
+		delete $cache{$epid};           #
+	    }                                   #
+	}                                       #
+    }                                           #
+    $bytes_read += $log->position();            #
+}                                               #
+
+
+#print "=" x 80, "\n" for (1..5);
+#foreach (sort keys %cache) {
+#    print "$_ $cache{$_}\n";
+#}
+
+#[eof]

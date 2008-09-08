@@ -18,6 +18,10 @@
 #
 # Prolly since it opens STDIN twice. Fix this!
 #
+# TODO: progress bar -- if output is on stdout, only display progress
+# bar after some specified time of silence (e.g. 5seconds without
+# output gives you a progress bar)
+
 
 use strict;
 use lib do {        # add script's directory to @INC
